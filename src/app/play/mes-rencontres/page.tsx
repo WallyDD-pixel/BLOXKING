@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { listMatchHistory, type OngoingMatchRow } from "@/app/play/actions";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/session";
 
 function opponentDisplayName(row: OngoingMatchRow, viewerId: string): string {
   const raw =
@@ -86,10 +86,7 @@ const toneClasses = {
 } as const;
 
 export default async function MesRencontresPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/connexion?next=/play/mes-rencontres");
 
   const { rows } = await listMatchHistory(100);

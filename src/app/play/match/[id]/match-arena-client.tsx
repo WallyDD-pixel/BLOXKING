@@ -26,7 +26,7 @@ import {
   type DisputeTicketRow,
 } from "@/app/play/actions";
 import { isPlacementComplete, type RankedStatsPublic } from "@/lib/ranked";
-import { publicDisputeEvidenceUrl } from "@/lib/supabase/public-storage-url";
+import { disputeEvidencePublicUrl } from "@/lib/storage/dispute-evidence-url";
 
 export type MatchArenaRow = {
   id: string;
@@ -914,7 +914,7 @@ export function MatchArenaClient({
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={publicDisputeEvidenceUrl(p)}
+                            src={disputeEvidencePublicUrl(p)}
                             alt=""
                             className="h-20 w-20 rounded-lg object-cover"
                           />
@@ -1168,7 +1168,7 @@ export function MatchArenaClient({
                                 >
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img
-                                    src={publicDisputeEvidenceUrl(p)}
+                                    src={disputeEvidencePublicUrl(p)}
                                     alt=""
                                     className="h-20 w-20 rounded-lg object-cover"
                                   />

@@ -1,8 +1,9 @@
-import { type NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/middleware";
+import { type NextRequest, NextResponse } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  return await updateSession(request);
+  // Sans Supabase SSR: pas de refresh automatique à faire ici.
+  // On laisse passer; la protection des routes est gérée côté serveur (layouts/actions).
+  return NextResponse.next({ request });
 }
 
 export const config = {

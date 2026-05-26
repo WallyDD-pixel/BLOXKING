@@ -4,7 +4,8 @@ import {
   cancelChallengeForm,
   createChallengeForm,
 } from "@/app/play/actions";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/session";
+import { dbQuery, dbQueryOne } from "@/lib/db/query";
 
 type Challenge = {
   id: string;
@@ -15,34 +16,36 @@ type Challenge = {
 };
 
 async function loadChallenges(): Promise<Challenge[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("open_challenges")
-    .select("id, creator_id, creator_display_name, status, created_at")
-    .eq("status", "open")
-    .order("created_at", { ascending: false });
-
-  if (error) return [];
-  return (data ?? []) as Challenge[];
+  try {
+    return await dbQuery<Challenge>(
+      `
+      select id, creator_id, creator_display_name, status, created_at
+      from public.open_challenges
+      where status = 'open'
+      order by created_at desc
+      `,
+    );
+  } catch {
+    return [];
+  }
 }
 
 export default async function DefisPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   const myId = user?.id;
 
   const challenges = await loadChallenges();
 
   let hasActiveMatch = false;
   if (myId) {
-    const { count } = await supabase
-      .from("matches")
-      .select("*", { count: "exact", head: true })
-      .or(`player_a.eq.${myId},player_b.eq.${myId}`)
-      .in("status", ["pending", "disputed"]);
-    hasActiveMatch = (count ?? 0) > 0;
+    const row = await dbQueryOne<{ c: string }>(
+      `
+      select count(*)::text as c from public.matches
+      where (player_a = $1 or player_b = $1) and status in ('pending', 'disputed')
+      `,
+      [myId],
+    );
+    hasActiveMatch = Number(row?.c ?? 0) > 0;
   }
 
   return (
@@ -132,10 +135,6 @@ export default async function DefisPage() {
           })
         )}
       </ul>
-
-      <p className="font-mono text-[0.65rem] text-zinc-600">
-        Historique & ELO · bientôt. SQL requis si erreurs Supabase.
-      </p>
 
       <Link
         href="/play"

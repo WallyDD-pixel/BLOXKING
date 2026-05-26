@@ -1,27 +1,25 @@
 import Link from "next/link";
 import { PlacementProgress } from "@/components/placement-progress";
+import { getCurrentUser } from "@/lib/auth/session";
+import { dbQueryOne } from "@/lib/db/query";
 import { DEFAULT_ELO } from "@/lib/ranked";
-import { createClient } from "@/lib/supabase/server";
 
 export default async function PlayHomePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
+  if (!user) return null;
 
   const display =
-    (user?.user_metadata as { roblox_username?: string } | undefined)
-      ?.roblox_username ?? user?.email?.split("@")[0];
+    user.roblox_username ?? user.display_name ?? user.email.split("@")[0];
 
   const initial = (display ?? "?").slice(0, 2).toUpperCase();
 
-  const { data: rankedRow } = user
-    ? await supabase
-        .from("player_ranked_stats")
-        .select("elo, placement_matches_played")
-        .eq("user_id", user.id)
-        .maybeSingle()
-    : { data: null };
+  const rankedRow = await dbQueryOne<{
+    elo: number;
+    placement_matches_played: number;
+  }>(
+    `select elo, placement_matches_played from public.player_ranked_stats where user_id = $1`,
+    [user.id],
+  );
 
   const placementMatchesPlayed = rankedRow?.placement_matches_played ?? 0;
   const elo = rankedRow?.elo ?? DEFAULT_ELO;
@@ -48,7 +46,7 @@ export default async function PlayHomePage() {
                 {display}
               </h1>
               <p className="mt-1 font-mono text-xs text-zinc-500">
-                ID session · {user?.id?.slice(0, 8)}…
+                ID session · {user.id.slice(0, 8)}…
               </p>
             </div>
           </div>

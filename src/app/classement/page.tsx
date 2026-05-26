@@ -1,23 +1,32 @@
 import { BackLink } from "@/components/back-link";
 import { ContentCard } from "@/components/content-card";
 import { PageShell } from "@/components/page-shell";
+import { getCurrentUser } from "@/lib/auth/session";
+import { dbQuery } from "@/lib/db/query";
 import { PLACEMENT_TOTAL } from "@/lib/ranked";
-import { createClient } from "@/lib/supabase/server";
 
 export default async function ClassementPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
-  const { data: rows, error } = await supabase
-    .from("player_ranked_stats")
-    .select("user_id, elo, placement_matches_played")
-    .order("elo", { ascending: false })
-    .limit(50);
+  let list: Array<{
+    user_id: string;
+    elo: number;
+    placement_matches_played: number;
+  }> = [];
+  let showError = false;
 
-  const list = !error && rows ? rows : [];
-  const showError = Boolean(error);
+  try {
+    list = await dbQuery(
+      `
+      select user_id, elo, placement_matches_played
+      from public.player_ranked_stats
+      order by elo desc
+      limit 50
+      `,
+    );
+  } catch {
+    showError = true;
+  }
 
   return (
     <PageShell>
@@ -34,12 +43,11 @@ export default async function ClassementPage() {
         <ContentCard className="mt-8">
           {showError ? (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/95">
-              Impossible de charger le classement (table ou politique SQL manquante).
-              Exécute la migration{" "}
+              Impossible de charger le classement. Exécute{" "}
               <code className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-xs">
-                008_ranked_elo_placement.sql
+                db/01_ranked.sql
               </code>{" "}
-              sur Supabase.
+              sur PostgreSQL.
             </div>
           ) : list.length === 0 ? (
             <div className="flex items-start gap-4">

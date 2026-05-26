@@ -1,12 +1,9 @@
 import Link from "next/link";
 import { signOut } from "@/app/auth/actions";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/session";
 
 export async function SiteHeader() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const navItems = [
     ...(user ? [{ href: "/play", label: "Jouer" as const }] : []),
@@ -14,10 +11,7 @@ export async function SiteHeader() {
     ...(!user ? [{ href: "/connexion", label: "Connexion" as const }] : []),
   ];
 
-  const display =
-    (user?.user_metadata?.roblox_username as string | undefined) ??
-    user?.email?.split("@")[0] ??
-    null;
+  const display = user?.roblox_username ?? user?.display_name ?? user?.email?.split("@")[0] ?? null;
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/[0.08] bg-[#050506]/75 backdrop-blur-xl backdrop-saturate-150">

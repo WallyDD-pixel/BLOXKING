@@ -1,29 +1,22 @@
 import { MatchmakingClient } from "@/app/play/recherche/matchmaking-client";
 import { RechercheHashScroll } from "@/app/play/recherche/hash-scroll";
 import { listOngoingMatches } from "@/app/play/actions";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/session";
+import { dbQueryOne } from "@/lib/db/query";
 
 export default async function RecherchePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await getCurrentUser();
   if (!user) return null;
 
   const displayName =
-    (user.user_metadata as { roblox_username?: string } | undefined)
-      ?.roblox_username ??
-    user.email?.split("@")[0] ??
-    "Joueur";
+    user.roblox_username ?? user.display_name ?? user.email.split("@")[0] ?? "Joueur";
 
   const { rows: ongoingMatches } = await listOngoingMatches();
 
-  const { data: rankedRow } = await supabase
-    .from("player_ranked_stats")
-    .select("placement_matches_played")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const rankedRow = await dbQueryOne<{ placement_matches_played: number }>(
+    `select placement_matches_played from public.player_ranked_stats where user_id = $1`,
+    [user.id],
+  );
   const placementMatchesPlayed = rankedRow?.placement_matches_played ?? 0;
 
   return (

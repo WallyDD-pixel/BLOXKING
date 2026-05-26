@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { MatchBackToList } from "@/components/match-back-to-list";
-import { enrichMatchLabels } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/session";
+import { dbQueryOne } from "@/lib/db/query";
+import { rpcJsonSystem } from "@/lib/db/rpc";
+import { enrichMatchLabels } from "@/lib/match/enrich-labels";
 import { getRankedSnapshotsForMatchParticipants } from "@/app/play/actions";
 import { MatchArenaClient, type MatchArenaRow } from "./match-arena-client";
 
@@ -12,28 +14,26 @@ export default async function MatchPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/connexion?next=/play");
 
   try {
     await enrichMatchLabels(id);
   } catch {
-    /* labels / roblox optionnels si migration ou clé service absente */
+    /* labels optionnels */
   }
 
-  await supabase.rpc("expire_disputed_matches_after_ticket_timeout");
+  await rpcJsonSystem(
+    `select expire_disputed_matches_after_ticket_timeout() as result`,
+  );
 
-  const { data: match, error } = await supabase
-    .from("matches")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const match = await dbQueryOne<MatchArenaRow>(
+    `select * from public.matches where id = $1`,
+    [id],
+  );
 
-  if (error || !match) notFound();
-  const m = match as MatchArenaRow;
+  if (!match) notFound();
+  const m = match;
   if (m.player_a !== user.id && m.player_b !== user.id) notFound();
 
   const { rankedA, rankedB } = await getRankedSnapshotsForMatchParticipants(

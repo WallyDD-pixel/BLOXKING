@@ -4,7 +4,9 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { AuthActionState } from "@/lib/auth-state";
-import { createClient } from "@/lib/supabase/server";
+import { dbQueryOne } from "@/lib/db/query";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { createSession, destroySession } from "@/lib/auth/session";
 
 async function getOrigin(): Promise<string> {
   const h = await headers();
@@ -40,27 +42,12 @@ const loginSchema = z.object({
 });
 
 function mapAuthError(message: string): string {
-  const m = message.toLowerCase();
-  if (m.includes("invalid login credentials")) {
-    return "E-mail ou mot de passe incorrect.";
-  }
-  if (m.includes("email not confirmed")) {
-    return "Confirme ton e-mail avant de te connecter (lien reçu dans ta boîte).";
-  }
   return message;
 }
 
 function isEmailAlreadyRegistered(message: string): boolean {
   const m = message.toLowerCase();
-  return (
-    m.includes("user already registered") ||
-    m.includes("already registered") ||
-    m.includes("email address is already") ||
-    m.includes("email already exists") ||
-    m.includes("already been registered") ||
-    m.includes("duplicate key value") ||
-    m.includes("unique constraint")
-  );
+  return m.includes("unique") || m.includes("duplicate") || m.includes("exists");
 }
 
 export async function signup(
@@ -86,23 +73,26 @@ export async function signup(
   }
 
   const { email, password, robloxUsername } = parsed.data;
-  const supabase = await createClient();
-  const origin = await getOrigin();
+  const origin = await getOrigin(); // conservé (emails possibles plus tard)
+  void origin;
 
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `${origin}/auth/callback`,
-      data: {
-        roblox_username: robloxUsername,
-        display_name: robloxUsername,
-      },
-    },
-  });
+  try {
+    const passwordHash = await hashPassword(password);
+    const row = await dbQueryOne<{ id: string }>(
+      `
+      insert into public.users (email, password_hash, roblox_username, display_name)
+      values ($1, $2, $3, $4)
+      returning id
+      `,
+      [email.toLowerCase(), passwordHash, robloxUsername, robloxUsername],
+    );
 
-  if (error) {
-    if (isEmailAlreadyRegistered(error.message)) {
+    if (!row?.id) return { error: "Impossible de créer le compte.", success: null };
+    await createSession(row.id);
+    redirect("/play");
+  } catch (e: unknown) {
+    const msg = e && typeof e === "object" && "message" in e ? String((e as any).message) : "Erreur";
+    if (isEmailAlreadyRegistered(msg)) {
       return {
         error:
           "Un compte existe déjà avec cet e-mail — tu t’es peut-être déjà inscrit. Utilise la connexion avec le même e-mail et le même mot de passe.",
@@ -110,17 +100,12 @@ export async function signup(
         hint: "use_login",
       };
     }
-    return { error: mapAuthError(error.message), success: null };
-  }
-
-  if (data.session) {
-    redirect("/play");
+    return { error: mapAuthError(msg), success: null };
   }
 
   return {
     error: null,
-    success:
-      "Compte créé. Si la confirmation e-mail est activée sur ton projet Supabase, vérifie ta boîte et clique sur le lien.",
+    success: "Compte créé.",
   };
 }
 
@@ -139,12 +124,17 @@ export async function login(
     return { error: msg, success: null };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword(parsed.data);
+  const email = parsed.data.email.toLowerCase();
+  const row = await dbQueryOne<{ id: string; password_hash: string }>(
+    `select id, password_hash from public.users where email = $1`,
+    [email],
+  );
 
-  if (error) {
-    return { error: mapAuthError(error.message), success: null };
-  }
+  if (!row) return { error: "E-mail ou mot de passe incorrect.", success: null };
+  const ok = await verifyPassword(parsed.data.password, row.password_hash);
+  if (!ok) return { error: "E-mail ou mot de passe incorrect.", success: null };
+
+  await createSession(row.id);
 
   const next = formData.get("next");
   if (
@@ -159,7 +149,6 @@ export async function login(
 }
 
 export async function signOut(): Promise<void> {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
+  await destroySession();
   redirect("/");
 }
