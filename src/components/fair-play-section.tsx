@@ -34,9 +34,8 @@ export function FairPlaySection() {
           FAIR PLAY & LITIGES
         </h2>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-zinc-300 sm:text-base">
-          Le ranked doit rester crédible. Voici comment on gère les résultats et les
-          cas où les joueurs ne sont pas d&apos;accord — avant même que tout soit
-          automatisé dans l&apos;app, les principes sont les mêmes.
+          Le ladder 1v1 doit rester crédible pour que le top 10 reflète le vrai niveau
+          avant la finale. Voici comment on gère les résultats et les désaccords.
         </p>
 
         <PvpRecordingTip variant="callout" className="mt-8" />

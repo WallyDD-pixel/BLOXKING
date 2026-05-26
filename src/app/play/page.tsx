@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { PlacementProgress } from "@/components/placement-progress";
+import { YoutubeLiveBadge } from "@/components/youtube-live-badge";
 import { getCurrentUser } from "@/lib/auth/session";
 import { dbQueryOne } from "@/lib/db/query";
+import { FINAL_PRIZE_ROBUX, FINALIST_COUNT } from "@/lib/competition-copy";
 import { DEFAULT_ELO } from "@/lib/ranked";
 
 export default async function PlayHomePage() {
@@ -45,6 +47,9 @@ export default async function PlayHomePage() {
               <h1 className="game-title game-glitch-text font-[family-name:var(--font-bebas)] text-4xl tracking-[0.08em] text-white sm:text-5xl">
                 {display}
               </h1>
+              <div className="mt-3">
+                <YoutubeLiveBadge />
+              </div>
               <p className="mt-1 font-mono text-xs text-zinc-500">
                 ID session · {user.id.slice(0, 8)}…
               </p>
@@ -58,6 +63,22 @@ export default async function PlayHomePage() {
             />
           </div>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-4 sm:px-5 sm:py-5">
+        <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-amber-400/90">
+          Objectif compétition
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-zinc-300 sm:text-[0.95rem]">
+          Enchaîne les duels <strong className="text-zinc-100">1v1</strong> classés
+          pour entrer dans le{" "}
+          <strong className="text-amber-100/95">top {FINALIST_COUNT}</strong> du site
+          et jouer la finale —{" "}
+          <strong className="text-amber-100/95">
+            {FINAL_PRIZE_ROBUX.toLocaleString("fr-FR")} Robux
+          </strong>{" "}
+          pour le vainqueur.
+        </p>
       </div>
 
       <div>

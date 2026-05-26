@@ -1,6 +1,12 @@
 import Link from "next/link";
 
-export function BackLink({ href = "/" }: { href?: string }) {
+export function BackLink({
+  href = "/",
+  label = "Accueil",
+}: {
+  href?: string;
+  label?: string;
+}) {
   return (
     <Link
       href={href}
@@ -12,7 +18,7 @@ export function BackLink({ href = "/" }: { href?: string }) {
       >
         ←
       </span>
-      Accueil
+      {label}
     </Link>
   );
 }

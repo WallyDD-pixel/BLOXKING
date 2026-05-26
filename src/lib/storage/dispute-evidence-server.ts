@@ -4,7 +4,10 @@ import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 
 function storageRoot(): string {
-  return process.env.DISPUTE_EVIDENCE_DIR ?? "/var/bloxking/dispute-evidence";
+  if (process.env.DISPUTE_EVIDENCE_DIR) {
+    return process.env.DISPUTE_EVIDENCE_DIR;
+  }
+  return path.join(process.cwd(), ".data", "dispute-evidence");
 }
 
 export async function saveDisputeEvidenceFile(

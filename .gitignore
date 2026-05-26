@@ -20,6 +20,9 @@
 # production
 /build
 
+# preuves litige (dev local)
+.data/
+
 # misc
 .DS_Store
 *.pem

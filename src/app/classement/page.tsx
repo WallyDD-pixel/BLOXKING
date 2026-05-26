@@ -1,9 +1,17 @@
+import Link from "next/link";
 import { BackLink } from "@/components/back-link";
 import { ContentCard } from "@/components/content-card";
 import { PvpRecordingTip } from "@/components/pvp-recording-tip";
+import { TournamentHeroBanner } from "@/components/tournament-hero-banner";
 import { PageShell } from "@/components/page-shell";
+import { YoutubeLiveBadge } from "@/components/youtube-live-badge";
 import { getCurrentUser } from "@/lib/auth/session";
 import { dbQuery } from "@/lib/db/query";
+import { playerDisplayName } from "@/lib/player-display-name";
+import {
+  FINAL_PRIZE_ROBUX,
+  FINALIST_COUNT,
+} from "@/lib/competition-copy";
 import { PLACEMENT_TOTAL } from "@/lib/ranked";
 
 export default async function ClassementPage() {
@@ -13,15 +21,25 @@ export default async function ClassementPage() {
     user_id: string;
     elo: number;
     placement_matches_played: number;
+    roblox_username: string | null;
+    display_name: string | null;
+    email: string;
   }> = [];
   let showError = false;
 
   try {
     list = await dbQuery(
       `
-      select user_id, elo, placement_matches_played
-      from public.player_ranked_stats
-      order by elo desc
+      select
+        s.user_id,
+        s.elo,
+        s.placement_matches_played,
+        u.roblox_username,
+        u.display_name,
+        u.email
+      from public.player_ranked_stats s
+      join public.users u on u.id = s.user_id
+      order by s.elo desc
       limit 50
       `,
     );
@@ -33,14 +51,40 @@ export default async function ClassementPage() {
     <PageShell>
       <div className="mx-auto w-full max-w-3xl">
         <BackLink />
+        <div className="mt-6">
+          <TournamentHeroBanner variant="compact" />
+        </div>
         <h1 className="mt-8 font-[family-name:var(--font-bebas)] text-4xl tracking-wide text-white sm:text-5xl">
           CLASSEMENT
         </h1>
+        <div className="mt-4">
+          <YoutubeLiveBadge />
+        </div>
         <p className="mt-4 max-w-xl text-zinc-400">
-          ELO ranked (départ 1000, placement {PLACEMENT_TOTAL} parties). Mis à jour
-          à chaque match confirmé.
+          Ladder <strong className="font-medium text-zinc-200">1v1</strong> en ELO
+          (départ 1000, placement {PLACEMENT_TOTAL} parties). Les{" "}
+          <strong className="font-medium text-amber-200/95">
+            {FINALIST_COUNT} premiers
+          </strong>{" "}
+          à la fin de la phase ranked sont qualifiés pour la finale — le vainqueur
+          remporte{" "}
+          <strong className="font-medium text-amber-200/95">
+            {FINAL_PRIZE_ROBUX.toLocaleString("fr-FR")} Robux
+          </strong>
+          .
         </p>
         <PvpRecordingTip variant="compact" className="mt-6" showFairPlayLink />
+
+        <div className="mt-6 rounded-xl border border-amber-500/25 bg-gradient-to-r from-amber-500/10 to-transparent px-4 py-4 sm:px-5">
+          <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-wider text-amber-300/95">
+            Zone finale · top {FINALIST_COUNT}
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+            Les lignes surlignées correspondent aux places qualificatives. Continue
+            à enchaîner les duels 1v1 validés pour sécuriser ta position avant la
+            clôture de la saison.
+          </p>
+        </div>
 
         <ContentCard className="mt-8">
           {showError ? (
@@ -93,22 +137,55 @@ export default async function ClassementPage() {
                 <tbody>
                   {list.map((row, i) => {
                     const isMe = user?.id === row.user_id;
+                    const rank = i + 1;
+                    const isFinalistZone = rank <= FINALIST_COUNT;
+                    const name = playerDisplayName(row);
                     return (
                       <tr
                         key={row.user_id}
                         className={`border-b border-white/5 font-mono text-zinc-200 ${
-                          isMe ? "bg-amber-500/10" : ""
-                        }`}
+                          isFinalistZone
+                            ? "bg-amber-500/[0.08] ring-1 ring-inset ring-amber-500/15"
+                            : ""
+                        } ${isMe ? "bg-amber-500/15" : ""}`}
                       >
-                        <td className="py-3 pr-4 tabular-nums text-zinc-500">
-                          {i + 1}
+                        <td className="py-3 pr-4 tabular-nums">
+                          <span
+                            className={
+                              isFinalistZone
+                                ? "font-semibold text-amber-200/95"
+                                : "text-zinc-500"
+                            }
+                          >
+                            {rank}
+                            {isFinalistZone ? (
+                              <span className="ml-1.5 hidden text-[0.55rem] uppercase tracking-wider text-amber-400/80 sm:inline">
+                                finale
+                              </span>
+                            ) : null}
+                          </span>
                         </td>
                         <td className="py-3 pr-4">
-                          <span className="text-zinc-300">
-                            {isMe
-                              ? "Toi"
-                              : `···${row.user_id.replace(/-/g, "").slice(-6)}`}
-                          </span>
+                          <Link
+                            href={`/joueur/${row.user_id}`}
+                            className={`block max-w-[10rem] truncate font-sans underline-offset-2 transition hover:text-amber-300 hover:underline sm:max-w-[14rem] ${
+                              isMe
+                                ? "font-semibold text-amber-100"
+                                : "text-zinc-200"
+                            }`}
+                            title={isMe ? `${name} (toi) — voir le profil` : `${name} — voir le profil`}
+                          >
+                            {isMe ? (
+                              <>
+                                {name}
+                                <span className="ml-1.5 text-xs font-normal text-amber-400/90 no-underline">
+                                  (toi)
+                                </span>
+                              </>
+                            ) : (
+                              name
+                            )}
+                          </Link>
                         </td>
                         <td className="py-3 pr-4 tabular-nums text-amber-200/95">
                           {row.elo}

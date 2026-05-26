@@ -5,20 +5,14 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { dbQuery, dbQueryOne } from "@/lib/db/query";
 import { rpcJson, rpcJsonSystem } from "@/lib/db/rpc";
 import {
-  buildDisputeEvidencePath,
-  detectEvidenceFromBuffer,
-  DISPUTE_EVIDENCE_MAX_BYTES,
-  formatDisputeVideoMaxMb,
   sanitizeDisputeChatMessage,
   sanitizeDisputeExplanation,
   validateDisputeStoragePaths,
-  disputeVideoMaxBytes,
 } from "@/lib/dispute-evidence";
 import { mapMatchRpcError } from "@/lib/match-rpc-errors";
 import { enrichMatchLabels } from "@/lib/match/enrich-labels";
 import { joinRankedQueue } from "@/lib/match/join-queue";
 import { disputeEvidencePublicUrl } from "@/lib/storage/dispute-evidence-url";
-import { saveDisputeEvidenceFile } from "@/lib/storage/dispute-evidence-server";
 import type { RankedStatsPublic } from "@/lib/ranked";
 
 async function getUserId(): Promise<string | null> {
@@ -563,46 +557,18 @@ export async function listDisputeTickets(
   }
 }
 
+/** @deprecated Préférer uploadDisputeEvidenceClient (route API, fichiers > ~1 Mo). */
 export async function uploadMatchDisputeEvidence(matchId: string, file: File) {
   const uid = await getUserId();
   if (!uid) return { error: "Non connecté" as const };
 
-  const ab = await file.arrayBuffer();
-  const buf = Buffer.from(ab);
-  const detected = detectEvidenceFromBuffer(buf);
-  if (!detected) {
-    return {
-      error:
-        "Format non supporté : image (JPEG, PNG, WebP) ou vidéo (MP4, WebM)." as const,
-    };
-  }
-
-  if (detected.kind === "image") {
-    if (ab.byteLength > DISPUTE_EVIDENCE_MAX_BYTES) {
-      return { error: "Image trop volumineuse (max. 2,5 Mo)." as const };
-    }
-  } else {
-    const videoMax = disputeVideoMaxBytes();
-    if (ab.byteLength > videoMax) {
-      return {
-        error: `Vidéo trop volumineuse (max. ${formatDisputeVideoMaxMb()} Mo). Compresse ou raccourcis le clip.` as const,
-      };
-    }
-  }
-
-  const objectPath = buildDisputeEvidencePath(matchId, uid, detected.ext);
-  try {
-    await saveDisputeEvidenceFile(objectPath, buf);
-  } catch {
-    return {
-      error:
-        detected.kind === "video"
-          ? ("Envoi de la vidéo refusé — réessaie plus tard." as const)
-          : ("Envoi de l’image refusé — réessaie plus tard." as const),
-    };
-  }
-
-  return { path: objectPath, kind: detected.kind as "image" | "video" };
+  const { processDisputeEvidenceUpload } = await import(
+    "@/lib/dispute-evidence-upload-server"
+  );
+  const buf = Buffer.from(await file.arrayBuffer());
+  const result = await processDisputeEvidenceUpload(matchId, uid, buf);
+  if ("error" in result) return { error: result.error };
+  return { path: result.path, kind: result.kind };
 }
 
 export async function matchSubmitDisputeTicket(

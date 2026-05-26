@@ -20,22 +20,33 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   const token = store.get(SESSION_COOKIE)?.value ?? null;
   if (!token) return null;
 
-  const row = await dbQueryOne<SessionUser>(
-    `
-    select
-      u.id,
-      u.email,
-      u.roblox_username,
-      u.display_name
-    from public.sessions s
-    join public.users u on u.id = s.user_id
-    where s.token = $1
-      and s.expires_at > now()
-    `,
-    [token],
-  );
-
-  return row ?? null;
+  try {
+    const row = await dbQueryOne<SessionUser>(
+      `
+      select
+        u.id,
+        u.email,
+        u.roblox_username,
+        u.display_name
+      from public.sessions s
+      join public.users u on u.id = s.user_id
+      where s.token = $1
+        and s.expires_at > now()
+      `,
+      [token],
+    );
+    return row ?? null;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/ECONNREFUSED|connect|joindre PostgreSQL/i.test(msg)) {
+      if (process.env.NODE_ENV !== "production") {
+        // eslint-disable-next-line no-console
+        console.warn("[auth] PostgreSQL indisponible — session ignorée (tunnel SSH ?)");
+      }
+      return null;
+    }
+    throw e;
+  }
 }
 
 export async function createSession(userId: string): Promise<void> {

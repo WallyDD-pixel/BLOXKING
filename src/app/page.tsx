@@ -1,8 +1,14 @@
-import Link from "next/link";
+import { Suspense } from "react";
+import { CompetitionConceptSection } from "@/components/competition-concept-section";
+import { FairPlaySection } from "@/components/fair-play-section";
+import { HomeHeroCta } from "@/components/home-hero-cta";
 import { HomeImageStrip } from "@/components/home-image-strip";
 import { PageShell } from "@/components/page-shell";
-import { FairPlaySection } from "@/components/fair-play-section";
-import { PvpModesSection } from "@/components/pvp-modes-section";
+import { TournamentHeroBanner } from "@/components/tournament-hero-banner";
+import { YoutubeHomeMedia } from "@/components/youtube-home-media";
+import { YoutubeLiveBanner } from "@/components/youtube-live-banner";
+import { getCurrentUser } from "@/lib/auth/session";
+import { FINAL_PRIZE_ROBUX, FINALIST_COUNT } from "@/lib/competition-copy";
 
 function IconChart() {
   return (
@@ -63,70 +69,51 @@ function IconUser() {
 
 const features = [
   {
-    title: "Classement vivant",
-    desc: "ELO ou ligues selon les matchs validés — tu vois où tu te situes en temps réel.",
+    title: "Duels 1v1 classés",
+    desc: "BO3 en solo : défis ou matchmaking. Chaque match validé fait évoluer ton ELO sur le site.",
+    Icon: IconUser,
+  },
+  {
+    title: `Top ${FINALIST_COUNT} finalistes`,
+    desc: `Les ${FINALIST_COUNT} premiers du classement à la fin de la phase ranked sont qualifiés pour la finale.`,
     Icon: IconChart,
   },
   {
-    title: "Matchs sérieux",
-    desc: "Double validation des scores — enregistre le combat pour te protéger si un litige survient.",
+    title: `${FINAL_PRIZE_ROBUX.toLocaleString("fr-FR")} Robux`,
+    desc: `Le vainqueur du tournoi final entre les ${FINALIST_COUNT} finalistes remporte ${FINAL_PRIZE_ROBUX.toLocaleString("fr-FR")} Robux.`,
     Icon: IconShield,
-  },
-  {
-    title: "Profil joueur",
-    desc: "Pseudo Roblox, historique et progression — tout au même endroit.",
-    Icon: IconUser,
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const user = await getCurrentUser();
+
   return (
     <PageShell>
       <div className="mx-auto w-full max-w-6xl flex-1">
-        <section className="relative pb-16 pt-6 sm:pb-24 sm:pt-10">
-          <div className="absolute -left-20 top-20 h-72 w-72 rounded-full bg-amber-500/10 blur-3xl sm:-left-10" />
-          <div className="absolute -right-16 top-40 h-64 w-64 rounded-full bg-teal-500/8 blur-3xl" />
-
-          <p className="relative mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-amber-400/95">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
-            Communauté PvP
-          </p>
-
-          <h1 className="relative max-w-3xl font-[family-name:var(--font-bebas)] text-5xl leading-[0.95] tracking-wide text-white sm:text-6xl md:text-7xl">
-            <span className="block bg-gradient-to-br from-white via-zinc-100 to-zinc-400 bg-clip-text text-transparent">
-              LE RANKED
-            </span>
-            <span className="mt-1 block bg-gradient-to-r from-amber-300 via-amber-400 to-amber-600 bg-clip-text text-transparent">
-              QU&apos;IL MANQUE AU JEU
-            </span>
+        <section className="relative pb-16 pt-2 sm:pb-24 sm:pt-4">
+          <h1 className="sr-only">
+            BloXKING — tournoi PvP Blox Fruit 1v1, top {FINALIST_COUNT} finale,{" "}
+            {FINAL_PRIZE_ROBUX.toLocaleString("fr-FR")} Robux
           </h1>
 
-          <HomeImageStrip />
+          <Suspense fallback={null}>
+            <YoutubeLiveBanner />
+          </Suspense>
 
-          <p className="relative mt-8 max-w-xl text-lg leading-relaxed text-zinc-400">
-            Inscris-toi, affronte d&apos;autres joueurs et grimpe dans le classement.
-            Les matchs seront validés par les deux joueurs pour limiter la triche.
-          </p>
-          <p className="relative mt-3 max-w-xl text-sm text-zinc-600">
-            Projet fan — non affilié à Roblox ni aux créateurs de Blox Fruits.
-          </p>
+          <TournamentHeroBanner variant="home" />
 
-          <div className="relative mt-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-            <Link
-              href="/inscription"
-              className="inline-flex h-12 items-center justify-center rounded-xl bg-gradient-to-b from-amber-400 to-amber-600 px-8 text-sm font-bold text-zinc-950 shadow-xl shadow-amber-900/40 ring-1 ring-amber-400/50 transition hover:from-amber-300 hover:to-amber-500 hover:shadow-amber-800/50"
-            >
-              Créer un compte
-            </Link>
-            <Link
-              href="/classement"
-              className="inline-flex h-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] px-8 text-sm font-semibold text-zinc-100 backdrop-blur-sm transition hover:border-white/25 hover:bg-white/[0.08]"
-            >
-              Voir le classement
-            </Link>
+          <HomeHeroCta user={user} />
+
+          <Suspense fallback={null}>
+            <YoutubeHomeMedia />
+          </Suspense>
+
+          <div className="mt-12">
+            <HomeImageStrip />
           </div>
 
-          <PvpModesSection />
+          <CompetitionConceptSection />
 
           <FairPlaySection />
         </section>
@@ -136,8 +123,8 @@ export default function Home() {
             POURQUOI BLOXKING
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-zinc-500">
-            Un hub simple pour la compétition, sans remplacer le jeu — juste un vrai ladder
-            pour la scène PvP.
+            Un ladder 1v1 transparent : du matchmaking au ticket finale, tout est pensé
+            pour qualifier les {FINALIST_COUNT} meilleurs pilotes.
           </p>
 
           <ul className="mt-10 grid gap-4 sm:grid-cols-3">

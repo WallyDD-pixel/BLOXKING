@@ -21,7 +21,6 @@ import {
   matchSubmitDisputeTicket,
   matchSubmitScoreClaim,
   postDisputeChatMessage,
-  uploadMatchDisputeEvidence,
   type DisputeChatMessageRow,
   type DisputeTicketRow,
 } from "@/app/play/actions";
@@ -35,6 +34,7 @@ import {
   DISPUTE_MAX_ATTACHMENTS,
   DISPUTE_MAX_VIDEOS_PER_BATCH,
 } from "@/lib/dispute-evidence";
+import { uploadDisputeEvidenceClient } from "@/lib/upload-dispute-evidence-client";
 import { PVP_RECORDING_DISPUTE_HINT } from "@/lib/pvp-recording-copy";
 
 export type MatchArenaRow = {
@@ -307,7 +307,7 @@ export function MatchArenaClient({
             setErr("Une seule vidéo par message (max. 50 Mo, MP4 ou WebM).");
             return;
           }
-          const res = await uploadMatchDisputeEvidence(matchId, file);
+          const res = await uploadDisputeEvidenceClient(matchId, file);
           if ("error" in res && res.error) {
             setErr(res.error);
             return;

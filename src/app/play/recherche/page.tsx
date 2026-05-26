@@ -31,9 +31,9 @@ export default async function RecherchePage() {
           RECHERCHE
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-500">
-          File d&apos;attente : le moteur te jumelle avec le prochain pilote
-          disponible. Lance l&apos;enregistrement du combat avant le premier
-          round — c&apos;est ta meilleure protection si le score est contesté.
+          File 1v1 : le moteur te jumelle avec le prochain adversaire disponible.
+          Chaque victoire fait monter ton ELO vers le top 10 qualificatif. Enregistre
+          le combat avant le premier round.
         </p>
       </div>
 
