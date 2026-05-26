@@ -1,26 +1,462 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #050506;
+  --foreground: #f4f4f5;
+  --bk-accent: #f59e0b;
+  --bk-accent-mid: #fbbf24;
+  --bk-surface: rgba(24, 24, 27, 0.72);
+  --bk-glow: rgba(245, 158, 11, 0.12);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bebas), ui-sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: rgba(245, 158, 11, 0.35);
+  color: #09090b;
+}
+
+/* Grille décorative légère */
+.bg-grid-fade {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 20%, transparent 70%);
+}
+
+/* Halo ambiant */
+.bg-glow-radial {
+  background: radial-gradient(
+    ellipse 90% 50% at 50% -20%,
+    var(--bk-glow),
+    transparent 55%
+  );
+}
+
+@keyframes search-ring-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 0.85;
+  }
+}
+
+.search-ring-1 {
+  animation: search-ring-pulse 2.2s ease-in-out infinite;
+}
+.search-ring-2 {
+  animation: search-ring-pulse 2.2s ease-in-out 0.35s infinite;
+}
+.search-ring-3 {
+  animation: search-ring-pulse 2.2s ease-in-out 0.7s infinite;
+}
+
+/* Scan sur une carte (matchmaking, zone fixe) */
+@keyframes mm-scan-sweep {
+  0% {
+    top: -10%;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    top: 78%;
+    opacity: 0;
+  }
+}
+
+.mm-scan-beam-card {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  height: 2.75rem;
+  pointer-events: none;
+  border-radius: 0.375rem;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(245, 158, 11, 0.14) 40%,
+    rgba(251, 191, 36, 0.2) 50%,
+    rgba(245, 158, 11, 0.14) 60%,
+    transparent 100%
+  );
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.12);
+  animation: mm-scan-sweep 4.8s ease-in-out infinite;
+  z-index: 5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mm-scan-beam-card {
+    animation: none;
+    opacity: 0.3;
+    top: 35%;
+  }
+
+  .mm-opponent-deck {
+    animation: none !important;
+  }
+}
+
+/* Ruban de cartes fictives dans une fenêtre fixe (une carte visible) */
+@keyframes mm-opponent-deck-scroll {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-50%);
+  }
+}
+
+.mm-opponent-deck {
+  animation: mm-opponent-deck-scroll 12s linear infinite;
+  will-change: transform;
+}
+
+/* Séquence « match trouvé » → création → redirection */
+@keyframes mm-match-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes mm-match-pulse-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 32px 8px rgba(245, 158, 11, 0.2);
+  }
+}
+
+.mm-match-reveal-panel {
+  animation: mm-match-reveal-in 0.55s ease-out forwards;
+}
+
+.mm-match-reveal-ring {
+  animation: mm-match-pulse-ring 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mm-match-reveal-panel {
+    animation: none;
+  }
+
+  .mm-match-reveal-ring {
+    animation: none;
+  }
+}
+
+.match-found {
+  animation: match-pop 0.55s ease-out;
+}
+
+@keyframes match-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* —— Espace jeu /play (ambre + zinc, même charte que le site) —— */
+.game-play-root {
+  --game-amber: #fbbf24;
+}
+
+.game-vignette {
+  background: radial-gradient(
+    ellipse 75% 65% at 50% 40%,
+    transparent 0%,
+    rgba(5, 5, 6, 0.5) 55%,
+    rgba(5, 5, 6, 0.92) 100%
+  );
+  pointer-events: none;
+}
+
+.game-scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.12) 2px,
+    rgba(0, 0, 0, 0.12) 3px
+  );
+  mix-blend-mode: overlay;
+}
+
+.game-panel {
+  position: relative;
+  background: linear-gradient(
+    165deg,
+    rgba(24, 24, 27, 0.65) 0%,
+    rgba(9, 9, 11, 0.92) 48%,
+    rgba(12, 10, 8, 0.95) 100%
+  );
+  border: 1px solid rgba(245, 158, 11, 0.15);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 12px 48px rgba(0, 0, 0, 0.45),
+    0 0 40px rgba(245, 158, 11, 0.05);
+}
+
+.game-title {
+  text-shadow:
+    0 0 24px rgba(245, 158, 11, 0.35),
+    0 0 2px rgba(255, 255, 255, 0.2);
+}
+
+.game-btn-primary {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #fcd34d 0%, #d97706 100%);
+  box-shadow:
+    0 0 0 1px rgba(251, 191, 36, 0.5),
+    0 4px 24px rgba(217, 119, 6, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transform: skewX(-2deg);
+}
+
+.game-btn-primary > span {
+  display: block;
+  transform: skewX(2deg);
+}
+
+.game-btn-primary:hover {
+  filter: brightness(1.08);
+  box-shadow:
+    0 0 0 1px rgba(251, 191, 36, 0.65),
+    0 6px 32px rgba(217, 119, 6, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.game-btn-ghost {
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(39, 39, 42, 0.55);
+  box-shadow: inset 0 0 20px rgba(245, 158, 11, 0.06);
+  transform: skewX(-2deg);
+}
+
+.game-btn-ghost > span {
+  display: block;
+  transform: skewX(2deg);
+}
+
+/* Sortie de file (action secondaire mais visible) */
+.game-btn-leave {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: linear-gradient(
+    180deg,
+    rgba(63, 63, 70, 0.85) 0%,
+    rgba(24, 24, 27, 0.95) 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 6px 24px rgba(0, 0, 0, 0.4),
+    0 0 28px rgba(248, 113, 113, 0.06);
+  transform: skewX(-2deg);
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    filter 0.18s ease;
+}
+
+.game-btn-leave > span {
+  display: inline-flex;
+  transform: skewX(2deg);
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.game-btn-leave:hover {
+  border-color: rgba(251, 165, 165, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 8px 28px rgba(0, 0, 0, 0.45),
+    0 0 36px rgba(248, 113, 113, 0.12);
+  filter: brightness(1.06);
+}
+
+.game-btn-leave:active {
+  filter: brightness(0.96);
+}
+
+.game-btn-leave:focus-visible {
+  outline: 2px solid rgba(245, 158, 11, 0.45);
+  outline-offset: 3px;
+}
+
+.game-hud-bar {
+  height: 6px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+}
+
+/* Rencontre 1v1 — liste déroulante BO3 */
+.match-arena-select-wrap {
+  border-radius: 0.75rem;
+  background: linear-gradient(
+    145deg,
+    rgba(245, 158, 11, 0.12) 0%,
+    rgba(39, 39, 42, 0.5) 40%,
+    rgba(9, 9, 11, 0.95) 100%
+  );
+  padding: 1px;
+  transition:
+    box-shadow 0.18s ease,
+    filter 0.18s ease;
+}
+
+.match-arena-select-wrap:hover {
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.2);
+}
+
+.match-arena-select-wrap:focus-within {
+  box-shadow:
+    0 0 0 2px rgba(245, 158, 11, 0.35),
+    0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.match-arena-select {
+  min-height: 3.25rem;
+  border: 1px solid rgba(39, 39, 42, 0.9);
+  color-scheme: dark;
+  -webkit-tap-highlight-color: transparent;
+  background-color: rgba(9, 9, 11, 0.97);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23fbbf24'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.25' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  background-size: 1.125rem;
+  padding-right: 2.85rem;
+  appearance: none;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.match-arena-select:hover:not(:disabled) {
+  border-color: rgba(245, 158, 11, 0.5) !important;
+  background-color: rgba(24, 24, 27, 0.98);
+}
+
+.match-arena-select:focus-visible {
+  outline: none;
+  border-color: rgba(251, 191, 36, 0.55) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 1px rgba(245, 158, 11, 0.25);
+}
+
+.match-arena-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.match-arena-step-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .match-arena-select {
+    background-image: none;
+    padding-right: 0.75rem;
+    appearance: auto;
+  }
+}
+
+/* Moins de délai 300 ms sur les boutons de la rencontre (mobile) */
+.match-arena-root button {
+  touch-action: manipulation;
+}
+
+/* Bloc central Joueur A · Score · Joueur B */
+.match-arena-vs-wrap {
+  border-radius: 1rem;
+  border: 1px solid rgba(245, 158, 11, 0.14);
+  background: linear-gradient(
+    165deg,
+    rgba(39, 39, 42, 0.4) 0%,
+    rgba(9, 9, 11, 0.88) 55%,
+    rgba(12, 10, 8, 0.92) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 20px 56px rgba(0, 0, 0, 0.45);
+  padding: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  .match-arena-vs-wrap {
+    padding: 0.75rem 1rem;
+    border-radius: 1.25rem;
+  }
+}
+
+.match-score-hub {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 0 1px rgba(245, 158, 11, 0.18),
+    0 8px 32px rgba(0, 0, 0, 0.55),
+    0 0 48px rgba(245, 158, 11, 0.06);
+}
+
+.game-hud-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #b45309, #fbbf24);
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.45);
+}
+
+@keyframes hud-pulse {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.game-glitch-text {
+  animation: hud-pulse 3s ease-in-out infinite;
 }

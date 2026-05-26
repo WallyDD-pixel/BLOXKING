@@ -1,0 +1,1507 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
+import {
+  getMatchById,
+  listDisputeChatMessages,
+  listDisputeTickets,
+  matchConfirmStarted,
+  matchFinalize,
+  matchResetAfterDispute,
+  matchSubmitDisputeTicket,
+  matchSubmitScoreClaim,
+  postDisputeChatMessage,
+  uploadMatchDisputeEvidence,
+  type DisputeChatMessageRow,
+  type DisputeTicketRow,
+} from "@/app/play/actions";
+import { isPlacementComplete, type RankedStatsPublic } from "@/lib/ranked";
+import { publicDisputeEvidenceUrl } from "@/lib/supabase/public-storage-url";
+
+export type MatchArenaRow = {
+  id: string;
+  player_a: string;
+  player_b: string;
+  player_a_label: string | null;
+  player_b_label: string | null;
+  player_a_roblox: string | null;
+  player_b_roblox: string | null;
+  source: string;
+  status: string;
+  match_started_a?: boolean;
+  match_started_b?: boolean;
+  claim_from_a_maps_a: number | null;
+  claim_from_a_maps_b: number | null;
+  claim_from_b_maps_a: number | null;
+  claim_from_b_maps_b: number | null;
+  b_accepts_a_claim?: boolean;
+  a_accepts_b_claim?: boolean;
+  dispute?: boolean;
+  created_at: string;
+  elo_delta_a?: number | null;
+  elo_delta_b?: number | null;
+};
+
+/** Résultats BO3 (repère global : maps gagnées par A, maps gagnées par B). */
+const BO3_OUTCOMES: { mapsA: number; mapsB: number }[] = [
+  { mapsA: 2, mapsB: 0 },
+  { mapsA: 2, mapsB: 1 },
+  { mapsA: 1, mapsB: 2 },
+  { mapsA: 0, mapsB: 2 },
+];
+
+function iWonOutcome(isPlayerA: boolean, o: { mapsA: number; mapsB: number }): boolean {
+  return isPlayerA ? o.mapsA > o.mapsB : o.mapsB > o.mapsA;
+}
+
+function perspectiveOutcomeLabel(
+  isPlayerA: boolean,
+  o: { mapsA: number; mapsB: number },
+): string {
+  const my = isPlayerA ? o.mapsA : o.mapsB;
+  const opp = isPlayerA ? o.mapsB : o.mapsA;
+  if (iWonOutcome(isPlayerA, o)) {
+    return `J'ai gagné ${my}-${opp}`;
+  }
+  return `Mon adversaire a gagné ${opp}-${my}`;
+}
+
+function splitOutcomeIndices(isPlayerA: boolean): {
+  wins: number[];
+  losses: number[];
+} {
+  const wins: number[] = [];
+  const losses: number[] = [];
+  BO3_OUTCOMES.forEach((o, i) => {
+    (iWonOutcome(isPlayerA, o) ? wins : losses).push(i);
+  });
+  return { wins, losses };
+}
+
+function claimInt(v: unknown): number | null {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function claimsMatch(m: MatchArenaRow): boolean {
+  const aa = claimInt(m.claim_from_a_maps_a);
+  const ab = claimInt(m.claim_from_a_maps_b);
+  const ba = claimInt(m.claim_from_b_maps_a);
+  const bb = claimInt(m.claim_from_b_maps_b);
+  if (aa == null || ab == null || ba == null || bb == null) return false;
+  return aa === ba && ab === bb;
+}
+
+function canFinalizeMatch(m: MatchArenaRow): boolean {
+  if (m.status === "confirmed") return false;
+  if (!m.match_started_a || !m.match_started_b) return false;
+  if (m.dispute) return false;
+  if (!claimsMatch(m)) return false;
+  return true;
+}
+
+/** Pourquoi le bouton « Terminer » reste inactif (vue joueur courant). */
+function finalizeHints(m: MatchArenaRow, viewerIsA: boolean): string[] {
+  const hints: string[] = [];
+  if (m.status === "confirmed") return hints;
+  if (!m.match_started_a || !m.match_started_b) {
+    hints.push("Les deux joueurs doivent confirmer le début (étape 1).");
+  }
+  if (m.dispute) {
+    hints.push("Un litige est ouvert : réinitialise ou réglez-le avant la clôture.");
+  }
+
+  const mySent = viewerIsA
+    ? claimInt(m.claim_from_a_maps_a) != null
+    : claimInt(m.claim_from_b_maps_a) != null;
+  const oppSent = viewerIsA
+    ? claimInt(m.claim_from_b_maps_a) != null
+    : claimInt(m.claim_from_a_maps_a) != null;
+
+  if (!mySent) {
+    hints.push(
+      "Envoie ta déclaration avec « Déclarer et envoyer mon score » (même résultat que celui que tu reconnais, ex. 2-0).",
+    );
+  }
+  if (!oppSent) {
+    hints.push("L’adversaire doit encore envoyer sa déclaration.");
+  }
+  if (mySent && oppSent && !claimsMatch(m)) {
+    hints.push(
+      "Les deux déclarations ne sont pas identiques — alignez-vous sur le même score.",
+    );
+  }
+
+  return hints;
+}
+
+export function MatchArenaClient({
+  matchId,
+  userId,
+  initialMatch,
+  initialRankedA,
+  initialRankedB,
+  sourceLabel,
+}: {
+  matchId: string;
+  userId: string;
+  initialMatch: MatchArenaRow;
+  initialRankedA: RankedStatsPublic | null;
+  initialRankedB: RankedStatsPublic | null;
+  sourceLabel: string;
+}) {
+  const router = useRouter();
+  const [m, setM] = useState<MatchArenaRow>(initialMatch);
+  const [rankedA, setRankedA] = useState<RankedStatsPublic | null>(
+    initialRankedA,
+  );
+  const [rankedB, setRankedB] = useState<RankedStatsPublic | null>(
+    initialRankedB,
+  );
+  const [err, setErr] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [outcomeIdx, setOutcomeIdx] = useState(0);
+  const [disputeTickets, setDisputeTickets] = useState<DisputeTicketRow[]>([]);
+  const [disputeDraft, setDisputeDraft] = useState("");
+  const [followUpDraft, setFollowUpDraft] = useState("");
+  const [disputeFlowOpen, setDisputeFlowOpen] = useState(false);
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [disputeEvidencePaths, setDisputeEvidencePaths] = useState<string[]>([]);
+  const [followUpEvidencePaths, setFollowUpEvidencePaths] = useState<string[]>([]);
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
+  const [chatMessages, setChatMessages] = useState<DisputeChatMessageRow[]>([]);
+  const [chatDraft, setChatDraft] = useState("");
+
+  const isA = m.player_a === userId;
+  const labelA = m.player_a_label ?? "Joueur A";
+  const labelB = m.player_b_label ?? "Joueur B";
+  const robloxA = m.player_a_roblox ?? m.player_a_label ?? "—";
+  const robloxB = m.player_b_roblox ?? m.player_b_label ?? "—";
+
+  const myStarted = isA ? !!m.match_started_a : !!m.match_started_b;
+  const oppStarted = isA ? !!m.match_started_b : !!m.match_started_a;
+  const bothStarted = !!m.match_started_a && !!m.match_started_b;
+
+  const myClaimA = isA ? m.claim_from_a_maps_a : m.claim_from_b_maps_a;
+  const myClaimB = isA ? m.claim_from_a_maps_b : m.claim_from_b_maps_b;
+  const hasMyClaim = myClaimA != null && myClaimB != null;
+
+  const oppClaimA = isA ? m.claim_from_b_maps_a : m.claim_from_a_maps_a;
+  const oppClaimB = isA ? m.claim_from_b_maps_b : m.claim_from_a_maps_b;
+  const hasOppClaim = oppClaimA != null && oppClaimB != null;
+
+  /** Les deux déclarations concordent : plus de modification côté formulaire. */
+  const scoreLocked = claimsMatch(m);
+
+  const finalizeHintsList = useMemo(
+    () => finalizeHints(m, isA),
+    [m, isA],
+  );
+
+  const refresh = useCallback(async () => {
+    const { match, rankedA: nextA, rankedB: nextB } =
+      await getMatchById(matchId);
+    if (match) setM(match as MatchArenaRow);
+    setRankedA(nextA);
+    setRankedB(nextB);
+  }, [matchId]);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      void refresh();
+    }, 1800);
+    return () => clearInterval(t);
+  }, [refresh]);
+
+  useEffect(() => {
+    if (myClaimA == null || myClaimB == null) return;
+    const a = Number(myClaimA);
+    const b = Number(myClaimB);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return;
+    const idx = BO3_OUTCOMES.findIndex(
+      (o) => o.mapsA === a && o.mapsB === b,
+    );
+    if (idx >= 0) setOutcomeIdx(idx);
+  }, [myClaimA, myClaimB]);
+
+  const refreshDisputeThreads = useCallback(async () => {
+    const [{ messages }, { tickets }] = await Promise.all([
+      listDisputeChatMessages(matchId),
+      listDisputeTickets(matchId),
+    ]);
+    setChatMessages(messages);
+    setDisputeTickets(tickets);
+  }, [matchId]);
+
+  useEffect(() => {
+    if (m.status === "confirmed") {
+      setDisputeTickets([]);
+      setChatMessages([]);
+      setChatDraft("");
+      return;
+    }
+    void refreshDisputeThreads();
+    const t = setInterval(() => void refreshDisputeThreads(), 4000);
+    return () => clearInterval(t);
+  }, [m.status, matchId, refreshDisputeThreads]);
+
+  const firstTicketOpenerId = useMemo(
+    () => disputeTickets[0]?.opened_by ?? null,
+    [disputeTickets],
+  );
+
+  useEffect(() => {
+    if (m.dispute || m.status === "disputed") {
+      setDisputeDraft("");
+      setDisputeFlowOpen(false);
+      setDisputeEvidencePaths([]);
+      setFollowUpDraft("");
+      setFollowUpOpen(false);
+      setFollowUpEvidencePaths([]);
+    }
+  }, [m.dispute, m.status]);
+
+  const appendEvidenceFiles = useCallback(
+    async (
+      fileList: FileList | null,
+      currentLen: number,
+      setPaths: Dispatch<SetStateAction<string[]>>,
+    ) => {
+      if (!fileList?.length) return;
+      const room = 5 - currentLen;
+      if (room <= 0) return;
+      const files = Array.from(fileList).slice(0, room);
+      setEvidenceBusy(true);
+      setErr(null);
+      try {
+        for (const file of files) {
+          const res = await uploadMatchDisputeEvidence(matchId, file);
+          if ("error" in res && res.error) {
+            setErr(res.error);
+            return;
+          }
+          if ("path" in res && res.path) {
+            setPaths((prev) => [...prev, res.path]);
+          }
+        }
+      } finally {
+        setEvidenceBusy(false);
+      }
+    },
+    [matchId],
+  );
+
+  const displayScore = useMemo(() => {
+    if (claimsMatch(m)) {
+      return {
+        a: m.claim_from_a_maps_a ?? 0,
+        b: m.claim_from_a_maps_b ?? 0,
+        consensus: true as const,
+      };
+    }
+    return { a: 0, b: 0, consensus: false as const };
+  }, [m]);
+
+  function run(
+    action: () => Promise<{ error?: string; ok?: boolean } | undefined>,
+  ) {
+    setErr(null);
+    startTransition(() => {
+      void (async () => {
+        const res = await action();
+        if (res && "error" in res && res.error) {
+          setErr(res.error);
+          return;
+        }
+        await refresh();
+        router.refresh();
+      })();
+    });
+  }
+
+  const outcomeGroups = useMemo(() => splitOutcomeIndices(isA), [isA]);
+
+  const globalFromSelection = () => {
+    const o = BO3_OUTCOMES[outcomeIdx];
+    return { mapsWonA: o.mapsA, mapsWonB: o.mapsB };
+  };
+
+  const finalizeDisabled = !canFinalizeMatch(m) || m.status === "confirmed";
+  const confirmed = m.status === "confirmed";
+  const eloDeltaA = claimInt(m.elo_delta_a);
+  const eloDeltaB = claimInt(m.elo_delta_b);
+  const eloDeltasReady =
+    confirmed &&
+    displayScore.consensus &&
+    eloDeltaA != null &&
+    eloDeltaB != null;
+  const aWinsBo3 =
+    displayScore.consensus && displayScore.a > displayScore.b;
+  const winnerEloDelta =
+    eloDeltasReady && aWinsBo3 ? eloDeltaA : eloDeltasReady ? eloDeltaB : null;
+  const loserEloDelta =
+    eloDeltasReady && aWinsBo3 ? eloDeltaB : eloDeltasReady ? eloDeltaA : null;
+
+  function formatEloDelta(n: number): string {
+    return `${n >= 0 ? "+" : ""}${n} ELO`;
+  }
+
+  if (m.status === "cancelled") {
+    return (
+      <div className="match-arena-root space-y-8 sm:space-y-10">
+        <section className="game-panel rounded-2xl border border-zinc-700/60 bg-zinc-950/80 px-5 py-8 sm:px-8 sm:py-10">
+          <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-zinc-500">
+            Rencontre classée
+          </p>
+          <h2 className="game-title mt-3 font-[family-name:var(--font-bebas)] text-3xl tracking-wide text-white sm:text-4xl">
+            Match annulé
+          </h2>
+          <p className="mt-4 max-w-prose text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
+            Ce match a été annulé automatiquement : un litige avec ticket
+            modération est resté sans résolution pendant plus de{" "}
+            <strong className="font-medium text-zinc-200">30 minutes</strong>{" "}
+            après l&apos;ouverture du ticket. Aucun résultat ranked ni changement
+            d&apos;ELO n&apos;est enregistré.
+          </p>
+          <p className="mt-3 text-sm text-zinc-500">
+            Tu peux relancer une recherche ou un défi : ce match ne bloque plus
+            ta file.
+          </p>
+          <Link
+            href="/play/recherche"
+            className="game-btn-primary mt-8 inline-flex min-h-[3rem] items-center justify-center px-8 py-3 font-[family-name:var(--font-bebas)] text-xl tracking-wide text-zinc-950"
+          >
+            <span>Retour à la recherche</span>
+          </Link>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="match-arena-root space-y-8 sm:space-y-10">
+      {err ? (
+        <p
+          className="rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3.5 text-sm leading-relaxed text-red-200 sm:px-5"
+          role="alert"
+        >
+          {err}
+        </p>
+      ) : null}
+
+      {/* Toujours 3 colonnes côte à côte (carte · score · carte) */}
+      <div className="match-arena-vs-wrap flex w-full min-w-0 flex-row items-stretch gap-1.5 sm:gap-3 md:gap-4 lg:gap-6">
+        <div className="flex min-h-[10rem] min-w-0 flex-1 basis-0 sm:min-h-[11rem] md:min-h-[12rem] lg:min-h-[13rem]">
+          <PlayerCard
+            highlight={isA}
+            label={labelA}
+            roblox={String(robloxA)}
+            subtitle="Joueur A"
+            started={!!m.match_started_a}
+            ranked={rankedA}
+            matchClosed={confirmed}
+            closedEloDelta={confirmed ? eloDeltaA : null}
+          />
+        </div>
+
+        <div
+          className="match-score-hub relative flex w-[4.75rem] shrink-0 flex-col items-center justify-center rounded-xl border border-amber-500/40 bg-gradient-to-b from-amber-950/50 via-zinc-950/90 to-black px-1 py-4 text-center sm:w-36 sm:rounded-2xl sm:px-2 sm:py-5 md:w-44 md:px-3 md:py-6 lg:w-52 lg:px-6"
+          aria-live="polite"
+        >
+          <span
+            className="pointer-events-none absolute inset-x-2 top-2 h-px bg-gradient-to-r from-transparent via-amber-500/25 to-transparent sm:inset-x-3 md:inset-x-6 md:top-3"
+            aria-hidden
+          />
+          <p className="font-mono text-[0.4rem] uppercase leading-tight tracking-[0.12em] text-amber-500/85 sm:text-[0.5rem] sm:tracking-[0.2em] md:text-[0.55rem] lg:text-[0.6rem] lg:tracking-[0.35em]">
+            <span className="sm:hidden">BO3</span>
+            <span className="hidden sm:inline">Score BO3</span>
+          </p>
+          <p className="game-title mt-1 font-[family-name:var(--font-bebas)] text-3xl leading-none tracking-wide text-white sm:mt-3 sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl">
+            <span className="tabular-nums">{displayScore.a}</span>
+            <span className="mx-0.5 text-amber-500/40 sm:mx-1 md:mx-2">—</span>
+            <span className="tabular-nums">{displayScore.b}</span>
+          </p>
+          {!displayScore.consensus && bothStarted ? (
+            <>
+              <p className="mt-1 line-clamp-2 font-mono text-[0.45rem] leading-tight text-zinc-500 sm:hidden">
+                {m.dispute ? "Litige" : "En attente"}
+              </p>
+              <p className="mt-2 hidden font-mono text-[0.6rem] leading-snug text-zinc-500 sm:mt-3 sm:block sm:px-0.5 sm:text-[0.55rem] md:mt-4 md:text-xs">
+                {m.dispute
+                  ? "Litige ou désaccord sur le score."
+                  : "En attente de déclarations identiques."}
+              </p>
+            </>
+          ) : null}
+          {displayScore.consensus && !confirmed ? (
+            <>
+              <p className="mt-1 font-mono text-[0.45rem] text-emerald-400/95 sm:hidden">
+                OK
+              </p>
+              <p className="mt-2 hidden font-mono text-[0.65rem] text-emerald-400/95 sm:mt-4 sm:block sm:text-xs">
+                Même résultat déclaré des deux côtés
+              </p>
+            </>
+          ) : null}
+          {confirmed ? (
+            <>
+              <p className="mt-1 font-mono text-[0.45rem] uppercase text-emerald-400 sm:hidden">
+                Fin
+              </p>
+              <p className="mt-2 hidden font-mono text-[0.55rem] uppercase leading-tight tracking-wider text-emerald-400 sm:mt-4 sm:block sm:text-xs">
+                Match clôturé
+              </p>
+              {eloDeltasReady && winnerEloDelta != null && loserEloDelta != null ? (
+                <div
+                  className="mt-2 hidden max-w-[11rem] flex-col gap-1 sm:flex md:max-w-none"
+                  role="status"
+                >
+                  <p className="font-mono text-[0.55rem] leading-snug text-emerald-300/95 md:text-[0.6rem]">
+                    Gagnant ·{" "}
+                    <span className="font-semibold text-emerald-200">
+                      {aWinsBo3 ? labelA : labelB}
+                    </span>
+                    <br />
+                    <span className="tabular-nums">
+                      {formatEloDelta(winnerEloDelta)}
+                    </span>
+                  </p>
+                  <p className="font-mono text-[0.55rem] leading-snug text-rose-300/90 md:text-[0.6rem]">
+                    Perdant ·{" "}
+                    <span className="font-semibold text-rose-200/95">
+                      {aWinsBo3 ? labelB : labelA}
+                    </span>
+                    <br />
+                    <span className="tabular-nums">
+                      {formatEloDelta(loserEloDelta)}
+                    </span>
+                  </p>
+                </div>
+              ) : displayScore.consensus ? (
+                <p className="mt-2 hidden font-mono text-[0.5rem] text-zinc-500 sm:block sm:max-w-[10rem] sm:text-[0.55rem]">
+                  Variations ELO non enregistrées pour ce match.
+                </p>
+              ) : null}
+              {eloDeltasReady &&
+              winnerEloDelta != null &&
+              loserEloDelta != null ? (
+                <div
+                  className="mt-1.5 flex flex-col gap-0.5 sm:hidden"
+                  role="status"
+                >
+                  <p className="font-mono text-[0.42rem] leading-tight text-emerald-300/95">
+                    Gagnant {formatEloDelta(winnerEloDelta)}
+                  </p>
+                  <p className="font-mono text-[0.42rem] leading-tight text-rose-300/85">
+                    Perdant {formatEloDelta(loserEloDelta)}
+                  </p>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+
+        <div className="flex min-h-[10rem] min-w-0 flex-1 basis-0 sm:min-h-[11rem] md:min-h-[12rem] lg:min-h-[13rem]">
+          <PlayerCard
+            highlight={!isA}
+            label={labelB}
+            roblox={String(robloxB)}
+            subtitle="Joueur B"
+            started={!!m.match_started_b}
+            ranked={rankedB}
+            matchClosed={confirmed}
+            closedEloDelta={confirmed ? eloDeltaB : null}
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-center px-1">
+        <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-zinc-950/90 px-4 py-2 font-mono text-[0.58rem] uppercase tracking-[0.2em] text-zinc-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:text-[0.65rem] sm:tracking-[0.22em]">
+          <span className="text-amber-600/90">{sourceLabel}</span>
+          <span className="text-zinc-700">·</span>
+          <span
+            className={
+              confirmed
+                ? "text-emerald-500/95"
+                : m.dispute || m.status === "disputed"
+                  ? "text-amber-500/95"
+                  : "text-zinc-400"
+            }
+          >
+            {confirmed
+              ? "confirmé"
+              : m.dispute || m.status === "disputed"
+                ? "litige"
+                : m.status}
+          </span>
+        </p>
+      </div>
+
+      {/* Chat dès l’ouverture du match (pending / disputed, jusqu’à clôture) */}
+      {!confirmed ? (
+        <section className="game-panel rounded-2xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/15 px-4 py-4 sm:px-5 sm:py-5">
+            <p className="font-mono text-sm font-semibold uppercase tracking-wider text-emerald-200/95">
+              Chat avec l&apos;adversaire
+            </p>
+            {m.dispute || m.status === "disputed" ? (
+              <p className="mt-2 text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
+                Même fil qu&apos;en phase normale : en litige, sert aussi à
+                négocier. Les preuves officielles passent par le dossier
+                modération (étape 2 si litige ouvert).
+              </p>
+            ) : (
+              <p className="mt-2 text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
+                Disponible tout de suite : salon Roblox, horaires, confirmation
+                que vous êtes prêts, etc. Visible uniquement par vous deux (pas
+                l&apos;équipe). Le chat reste actif si un litige est ouvert plus
+                bas.
+              </p>
+            )}
+            <ul
+              className="mt-4 max-h-64 space-y-2 overflow-y-auto rounded-lg border border-white/10 bg-black/25 p-3 sm:max-h-80"
+              aria-label="Messages avec l&apos;adversaire"
+            >
+              {chatMessages.length === 0 ? (
+                <li className="text-center text-sm text-zinc-500">
+                  Aucun message — dis bonjour ou propose un salon pour jouer.
+                </li>
+              ) : (
+                chatMessages.map((msg) => {
+                  const mine = msg.author_id === userId;
+                  const when = new Date(msg.created_at).toLocaleString(
+                    "fr-FR",
+                    { dateStyle: "short", timeStyle: "short" },
+                  );
+                  return (
+                    <li
+                      key={msg.id}
+                      className={`rounded-lg border px-3 py-2.5 text-sm ${
+                        mine
+                          ? "border-emerald-500/25 bg-emerald-950/30 text-zinc-100"
+                          : "border-white/10 bg-zinc-950/70 text-zinc-200"
+                      }`}
+                    >
+                      <p className="font-mono text-[0.55rem] text-zinc-500">
+                        {mine ? "Toi" : "Adversaire"} · {when}
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap leading-relaxed">
+                        {msg.body}
+                      </p>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+              <textarea
+                value={chatDraft}
+                onChange={(e) => setChatDraft(e.target.value)}
+                rows={2}
+                maxLength={2000}
+                placeholder="Salon, horaire, ready ? …"
+                className="min-h-[4rem] w-full flex-1 resize-y rounded-xl border border-white/12 bg-zinc-950/85 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500/35 focus:outline-none focus:ring-1 focus:ring-emerald-500/25"
+                aria-label="Message pour l&apos;adversaire"
+              />
+              <button
+                type="button"
+                disabled={pending || chatDraft.trim().length < 1}
+                onClick={() => {
+                  const text = chatDraft.trim();
+                  if (text.length < 1) return;
+                  setErr(null);
+                  startTransition(() => {
+                    void (async () => {
+                      const res = await postDisputeChatMessage(matchId, text);
+                      if (res && "error" in res && res.error) {
+                        setErr(res.error);
+                        return;
+                      }
+                      setChatDraft("");
+                      await refreshDisputeThreads();
+                      router.refresh();
+                    })();
+                  });
+                }}
+                className="game-btn-primary min-h-[2.75rem] shrink-0 px-5 py-2.5 text-sm disabled:opacity-40"
+              >
+                Envoyer
+              </button>
+            </div>
+            <p className="mt-1 font-mono text-[0.55rem] text-zinc-600">
+              {chatDraft.trim().length}/2000
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {/* 1. Début mutuel */}
+      {!confirmed ? (
+        <section className="game-panel rounded-2xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          <div className="border-l-2 border-amber-500/40 pl-3 sm:pl-4">
+            <h2 className="match-arena-step-title font-mono text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-amber-500/90 sm:text-[0.7rem] sm:tracking-[0.32em]">
+              <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded border border-amber-500/35 bg-amber-500/10 px-1.5 text-[0.6rem] text-amber-200">
+                1
+              </span>
+              <span>Début de la rencontre</span>
+            </h2>
+            <p className="mt-3 max-w-prose text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
+              Les deux joueurs doivent confirmer que la partie a bien commencé en
+              jeu avant la saisie du score.
+            </p>
+          </div>
+          <div className="mt-6 flex flex-col gap-4 sm:mt-7 sm:flex-row sm:flex-wrap sm:items-center sm:gap-5">
+            {myStarted ? (
+              <div className="flex w-full min-h-[3rem] items-center justify-center gap-3 rounded-xl border border-emerald-500/35 bg-emerald-500/[0.09] px-5 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:w-auto">
+                <span
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-emerald-400/40 bg-emerald-500/15 text-emerald-400"
+                  aria-hidden
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                </span>
+                <span className="text-center font-mono text-sm font-medium text-emerald-100/95 sm:text-base">
+                  Tu as confirmé le début
+                </span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => run(() => matchConfirmStarted(matchId))}
+                className="game-btn-primary w-full min-h-[3rem] px-5 py-3.5 disabled:opacity-50 sm:w-auto sm:min-h-0 sm:px-6 sm:py-3"
+              >
+                <span className="text-center text-[0.95rem] sm:text-base">
+                  Confirmer le début (ma partie a commencé)
+                </span>
+              </button>
+            )}
+            <p className="font-mono text-xs text-zinc-500 sm:text-[0.8rem]">
+              <span className="text-zinc-600">Adversaire</span>
+              <span className="mx-2 text-zinc-700">·</span>
+              {oppStarted ? (
+                <span className="font-medium text-emerald-400/95">confirmé</span>
+              ) : (
+                <span className="text-amber-500/75">en attente</span>
+              )}
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {/* 2. Déclaration BO3 */}
+      {bothStarted && !confirmed ? (
+        <section className="game-panel rounded-2xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          <div className="border-l-2 border-amber-500/40 pl-3 sm:pl-4">
+            <h2 className="match-arena-step-title font-mono text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-amber-500/90 sm:text-[0.7rem] sm:tracking-[0.32em]">
+              <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded border border-amber-500/35 bg-amber-500/10 px-1.5 text-[0.6rem] text-amber-200">
+                2
+              </span>
+              <span>Déclaration BO3</span>
+            </h2>
+            <p className="mt-3 max-w-prose text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
+              Choisis le résultat final (premier à 2 manches) et envoie ta
+              déclaration. L&apos;adversaire fait pareil de son côté — les deux
+              doivent indiquer le même score pour clôturer.
+            </p>
+          </div>
+
+          {m.dispute || m.status === "disputed" ? (
+            <div className="mt-6 space-y-6 rounded-xl border border-amber-600/45 bg-gradient-to-br from-amber-500/12 to-zinc-950/60 px-4 py-5 sm:px-6 sm:py-6">
+              <div className="rounded-xl border border-amber-500/35 bg-black/30 px-4 py-4 sm:px-5 sm:py-5">
+                <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-amber-200/95">
+                  Litige ouvert — que se passe-t-il ?
+                </p>
+                {firstTicketOpenerId == null ? (
+                  <p className="mt-3 text-sm leading-relaxed text-zinc-300 sm:text-[0.95rem]">
+                    Un litige est actif sur ce match. Utilise le{" "}
+                    <strong className="font-medium text-zinc-100">
+                      chat vert en haut de la page
+                    </strong>{" "}
+                    pour tenter de vous mettre d&apos;accord, et le{" "}
+                    <strong className="font-medium text-zinc-100">
+                      dossier modération
+                    </strong>{" "}
+                    ci-dessous pour envoyer des preuves à l&apos;équipe.
+                  </p>
+                ) : firstTicketOpenerId === userId ? (
+                  <p className="mt-3 text-sm leading-relaxed text-zinc-300 sm:text-[0.95rem]">
+                    <strong className="font-medium text-amber-100/95">
+                      Tu as ouvert
+                    </strong>{" "}
+                    la demande de litige (ticket modération) : tu n&apos;es pas
+                    d&apos;accord avec la situation ou une déclaration.
+                    L&apos;adversaire peut{" "}
+                    <strong className="font-medium text-zinc-100">
+                      répondre avec ses preuves
+                    </strong>{" "}
+                    dans le fil modération et{" "}
+                    <strong className="font-medium text-zinc-100">
+                      discuter avec toi dans le chat en haut
+                    </strong>{" "}
+                    pour trouver une solution.
+                  </p>
+                ) : (
+                  <p className="mt-3 text-sm leading-relaxed text-zinc-300 sm:text-[0.95rem]">
+                    <strong className="font-medium text-amber-100/95">
+                      Ton adversaire a ouvert un litige
+                    </strong>{" "}
+                    : il n&apos;est pas d&apos;accord avec ta déclaration (ou
+                    avec le déroulé du match).{" "}
+                    <strong className="font-medium text-zinc-100">
+                      Ajoute tes preuves
+                    </strong>{" "}
+                    (captures, explications) via les messages modération, et{" "}
+                    <strong className="font-medium text-zinc-100">
+                      échange dans le chat en haut
+                    </strong>{" "}
+                    pour clarifier le score ou convenir d&apos;un arrangement.
+                    Tant que le litige est ouvert, le match ne peut pas être
+                    clôturé.
+                  </p>
+                )}
+                <p className="mt-3 border-t border-white/10 pt-3 font-mono text-[0.55rem] leading-relaxed text-zinc-500">
+                  Chaque message est horodaté côté serveur : des notifications
+                  (push, e-mail) pourront plus tard prévenir l&apos;adversaire ou
+                  l&apos;équipe lors d&apos;une nouvelle activité sur ce litige.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-mono text-sm font-semibold uppercase tracking-wider text-amber-200">
+                  Dossier modération (équipe)
+                </p>
+                <p className="mt-3 text-sm leading-relaxed text-zinc-300 sm:text-[0.95rem]">
+                  Chaque entrée ci-dessous documente le litige pour les
+                  modérateurs (faits, captures). Les deux joueurs y ont accès en
+                  lecture. Utilise « Ajouter un message » pour compléter le
+                  dossier si besoin.
+                </p>
+              </div>
+
+              {disputeTickets.length > 0 ? (
+                <ul className="space-y-3 rounded-lg border border-white/10 bg-black/25 p-3 sm:p-4">
+                  <p className="font-mono text-[0.55rem] uppercase tracking-wider text-zinc-500">
+                    Fil du ticket
+                  </p>
+                  {disputeTickets.map((t) => {
+                    const mine = t.opened_by === userId;
+                    const when = new Date(t.created_at).toLocaleString("fr-FR", {
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    });
+                    return (
+                      <li
+                        key={t.id}
+                        className="rounded-md border border-white/8 bg-zinc-950/60 px-3 py-2.5"
+                      >
+                        <p className="font-mono text-[0.6rem] text-zinc-500">
+                          {mine ? "Toi" : "Adversaire"} · {when}
+                        </p>
+                        <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
+                          {t.body}
+                        </p>
+                        {t.attachment_urls.length > 0 ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {t.attachment_urls.map((url) => (
+                              <a
+                                key={url}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-block rounded-lg border border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={url}
+                                  alt="Pièce jointe du ticket"
+                                  className="max-h-36 max-w-[min(100%,14rem)] rounded-lg object-cover"
+                                />
+                              </a>
+                            ))}
+                          </div>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="rounded-lg border border-dashed border-zinc-600/80 bg-zinc-950/40 px-3 py-3 text-sm text-zinc-500">
+                  Aucun message sur ce ticket pour l&apos;instant — ajoute une
+                  explication ci-dessous.
+                </p>
+              )}
+
+              {!followUpOpen ? (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => setFollowUpOpen(true)}
+                  className="w-full rounded-xl border border-amber-500/35 bg-zinc-950/50 px-4 py-3.5 text-left text-sm font-medium text-amber-100/95 transition-colors hover:bg-amber-500/10 sm:text-[0.95rem]"
+                >
+                  Ajouter un message ou des preuves (nouveau message modération)
+                </button>
+              ) : (
+                <div className="rounded-xl border border-white/12 bg-zinc-950/50 px-4 py-4">
+                  <label className="block font-mono text-[0.6rem] uppercase tracking-wider text-zinc-500">
+                    Précision pour l&apos;équipe
+                  </label>
+                  <textarea
+                    value={followUpDraft}
+                    onChange={(e) => setFollowUpDraft(e.target.value)}
+                    rows={4}
+                    maxLength={2000}
+                    placeholder="Minimum 10 caractères — contexte, ce que tu proposes…"
+                    className="mt-2 w-full resize-y rounded-xl border border-white/15 bg-zinc-950/80 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500/30"
+                  />
+                  <p className="mt-1 font-mono text-[0.55rem] text-zinc-600">
+                    {followUpDraft.trim().length}/2000 · min. 10
+                  </p>
+                  <p className="mt-4 font-mono text-[0.6rem] uppercase tracking-wider text-zinc-500">
+                    Images (optionnel, max 5 · JPEG, PNG, WebP · 2,5 Mo chacune)
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <label className="cursor-pointer rounded-lg border border-white/15 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-300 hover:border-amber-500/30">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        multiple
+                        className="sr-only"
+                        disabled={pending || evidenceBusy || followUpEvidencePaths.length >= 5}
+                        onChange={(e) => {
+                          void appendEvidenceFiles(
+                            e.target.files,
+                            followUpEvidencePaths.length,
+                            setFollowUpEvidencePaths,
+                          );
+                          e.target.value = "";
+                        }}
+                      />
+                      {evidenceBusy ? "Envoi…" : "Ajouter des images"}
+                    </label>
+                    <span className="font-mono text-[0.55rem] text-zinc-600">
+                      {followUpEvidencePaths.length}/5
+                    </span>
+                  </div>
+                  {followUpEvidencePaths.length > 0 ? (
+                    <ul className="mt-3 flex flex-wrap gap-2">
+                      {followUpEvidencePaths.map((p) => (
+                        <li
+                          key={p}
+                          className="relative rounded-lg border border-white/10"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={publicDisputeEvidenceUrl(p)}
+                            alt=""
+                            className="h-20 w-20 rounded-lg object-cover"
+                          />
+                          <button
+                            type="button"
+                            disabled={pending}
+                            onClick={() =>
+                              setFollowUpEvidencePaths((prev) =>
+                                prev.filter((x) => x !== p),
+                              )
+                            }
+                            className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-zinc-600 bg-zinc-900 text-xs text-zinc-300 hover:bg-red-950/80"
+                            aria-label="Retirer cette image"
+                          >
+                            ×
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <button
+                      type="button"
+                      disabled={pending || followUpDraft.trim().length < 10}
+                      onClick={() => {
+                        const msg = followUpDraft.trim();
+                        if (msg.length < 10) return;
+                        setErr(null);
+                        startTransition(() => {
+                          void (async () => {
+                            const res = await matchSubmitDisputeTicket(
+                              matchId,
+                              msg,
+                              followUpEvidencePaths,
+                            );
+                            if (res?.error) {
+                              setErr(res.error);
+                              return;
+                            }
+                            setFollowUpDraft("");
+                            setFollowUpEvidencePaths([]);
+                            setFollowUpOpen(false);
+                            const {
+                              match: next,
+                              rankedA: na,
+                              rankedB: nb,
+                            } = await getMatchById(matchId);
+                            if (next) setM(next as MatchArenaRow);
+                            setRankedA(na);
+                            setRankedB(nb);
+                            const { tickets } = await listDisputeTickets(matchId);
+                            setDisputeTickets(tickets);
+                            router.refresh();
+                          })();
+                        });
+                      }}
+                      className="game-btn-primary min-h-[2.75rem] px-4 py-2.5 text-sm disabled:opacity-40"
+                    >
+                      Envoyer le message
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => {
+                        setFollowUpOpen(false);
+                        setFollowUpEvidencePaths([]);
+                      }}
+                      className="text-sm text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline"
+                    >
+                      Fermer sans envoyer
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                disabled={pending || !m.dispute}
+                onClick={() => run(() => matchResetAfterDispute(matchId))}
+                className="game-btn-ghost w-full min-h-[3rem] border-amber-500/40 px-5 py-3 text-amber-100 disabled:opacity-40 sm:w-auto sm:min-h-0"
+              >
+                <span>Réinitialiser la saisie après litige</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="mt-6 flex flex-col gap-5 md:flex-row md:items-end md:gap-6">
+                <label className="flex min-w-0 flex-1 flex-col gap-2.5 font-mono text-[0.65rem] font-medium uppercase tracking-[0.2em] text-zinc-500 sm:tracking-[0.22em]">
+                  Résultat (ta perspective)
+                  <div className="match-arena-select-wrap relative">
+                    <select
+                      value={outcomeIdx}
+                      disabled={scoreLocked || pending}
+                      onChange={(e) =>
+                        setOutcomeIdx(Number.parseInt(e.target.value, 10))
+                      }
+                      className="match-arena-select w-full cursor-pointer rounded-[10px] px-4 py-3.5 pr-11 text-left text-base font-medium text-zinc-100 disabled:cursor-not-allowed disabled:opacity-55"
+                      aria-label="Résultat du match au format BO3"
+                    >
+                      <optgroup label="Tes victoires">
+                        {outcomeGroups.wins.map((i) => (
+                          <option key={i} value={i}>
+                            {perspectiveOutcomeLabel(isA, BO3_OUTCOMES[i])}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Victoires de l'adversaire">
+                        {outcomeGroups.losses.map((i) => (
+                          <option key={i} value={i}>
+                            {perspectiveOutcomeLabel(isA, BO3_OUTCOMES[i])}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+                </label>
+                <button
+                  type="button"
+                  disabled={scoreLocked || pending}
+                  onClick={() => {
+                    const { mapsWonA, mapsWonB } = globalFromSelection();
+                    return run(() =>
+                      matchSubmitScoreClaim(matchId, mapsWonA, mapsWonB),
+                    );
+                  }}
+                  className="game-btn-primary w-full min-h-[3rem] shrink-0 px-5 py-3.5 disabled:opacity-40 md:w-auto md:min-w-[220px]"
+                >
+                  <span className="text-center text-[0.95rem] sm:text-base">
+                    {scoreLocked
+                      ? "Score verrouillé (accord)"
+                      : hasMyClaim
+                        ? "Mettre à jour ma déclaration"
+                        : "Déclarer et envoyer mon score"}
+                  </span>
+                </button>
+              </div>
+
+              {scoreLocked ? (
+                <p className="mt-4 max-w-prose text-sm leading-relaxed text-emerald-200/90 sm:text-[0.95rem]">
+                  Les deux joueurs ont déclaré le même résultat — la saisie est
+                  figée. Tu peux passer à l&apos;étape 3 pour enregistrer le
+                  match.
+                </p>
+              ) : null}
+
+              {hasOppClaim ? (
+                <div className="mt-8 rounded-xl border border-white/12 bg-zinc-950/70 px-4 py-5 sm:px-6 sm:py-6">
+                  <p className="font-mono text-[0.6rem] uppercase tracking-[0.28em] text-zinc-500 sm:text-[0.65rem]">
+                    Déclaration de l&apos;adversaire (lecture seule)
+                  </p>
+                  <p className="game-title mt-3 text-4xl tabular-nums text-white sm:text-5xl">
+                    {oppClaimA} — {oppClaimB}
+                  </p>
+                  <p className="mt-2 font-mono text-[0.7rem] text-zinc-500 sm:text-xs">
+                    Perspective globale · joueur A — joueur B
+                  </p>
+                  <div className="mt-5 rounded-xl border border-red-500/25 bg-red-950/10 px-4 py-4">
+                    <p className="font-mono text-[0.6rem] uppercase tracking-wider text-red-300/90">
+                      Désaccord · ticket modération
+                    </p>
+                    <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+                      Si le résultat affiché ne reflète pas la réalité, ouvre un
+                      ticket : les scores déclarés seront joints automatiquement
+                      pour l&apos;équipe (tu peux ajouter des captures).
+                    </p>
+                    {!disputeFlowOpen ? (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => setDisputeFlowOpen(true)}
+                        className="mt-4 min-h-[3rem] w-full rounded-xl border border-red-500/50 bg-red-950/40 px-5 py-3 text-sm font-semibold text-red-100 transition-colors hover:bg-red-500/15 sm:text-[0.95rem]"
+                      >
+                        Il y a un problème — on n&apos;est pas d&apos;accord
+                      </button>
+                    ) : (
+                      <div className="mt-4 space-y-4 border-t border-red-500/20 pt-4">
+                        <div className="grid gap-3 rounded-lg border border-white/10 bg-black/30 px-3 py-3 sm:grid-cols-2">
+                          <div>
+                            <p className="font-mono text-[0.55rem] uppercase tracking-wider text-zinc-500">
+                              Ton score déclaré (A — B)
+                            </p>
+                            <p className="mt-1 font-[family-name:var(--font-bebas)] text-2xl tabular-nums text-white">
+                              {myClaimA ?? "—"} — {myClaimB ?? "—"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="font-mono text-[0.55rem] uppercase tracking-wider text-zinc-500">
+                              Score déclaré par l&apos;adversaire (A — B)
+                            </p>
+                            <p className="mt-1 font-[family-name:var(--font-bebas)] text-2xl tabular-nums text-amber-100/95">
+                              {oppClaimA ?? "—"} — {oppClaimB ?? "—"}
+                            </p>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block font-mono text-[0.6rem] uppercase tracking-wider text-zinc-400">
+                            Pourquoi estimes-tu avoir raison (et pas l&apos;autre
+                            joueur) ?
+                          </label>
+                          <textarea
+                            value={disputeDraft}
+                            onChange={(e) => setDisputeDraft(e.target.value)}
+                            rows={5}
+                            maxLength={2000}
+                            placeholder="Explique clairement (min. 10 caractères). Pas de HTML — texte brut uniquement."
+                            className="mt-2 w-full resize-y rounded-xl border border-white/12 bg-zinc-950/90 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-red-500/35 focus:outline-none focus:ring-1 focus:ring-red-500/25"
+                          />
+                          <p className="mt-1 font-mono text-[0.55rem] text-zinc-600">
+                            {disputeDraft.trim().length}/2000 · caractères
+                            dangereux filtrés côté serveur
+                          </p>
+                        </div>
+                        <div>
+                          <p className="font-mono text-[0.6rem] uppercase tracking-wider text-zinc-500">
+                            Captures (optionnel, max 5 · JPEG, PNG, WebP · 2,5 Mo
+                            chacune)
+                          </p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <label className="cursor-pointer rounded-lg border border-white/15 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-300 hover:border-red-500/30">
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                multiple
+                                className="sr-only"
+                                disabled={
+                                  pending ||
+                                  evidenceBusy ||
+                                  disputeEvidencePaths.length >= 5
+                                }
+                                onChange={(e) => {
+                                  void appendEvidenceFiles(
+                                    e.target.files,
+                                    disputeEvidencePaths.length,
+                                    setDisputeEvidencePaths,
+                                  );
+                                  e.target.value = "";
+                                }}
+                              />
+                              {evidenceBusy ? "Envoi…" : "Ajouter des images"}
+                            </label>
+                            <span className="font-mono text-[0.55rem] text-zinc-600">
+                              {disputeEvidencePaths.length}/5
+                            </span>
+                          </div>
+                          {disputeEvidencePaths.length > 0 ? (
+                            <ul className="mt-3 flex flex-wrap gap-2">
+                              {disputeEvidencePaths.map((p) => (
+                                <li
+                                  key={p}
+                                  className="relative rounded-lg border border-white/10"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={publicDisputeEvidenceUrl(p)}
+                                    alt=""
+                                    className="h-20 w-20 rounded-lg object-cover"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={pending}
+                                    onClick={() =>
+                                      setDisputeEvidencePaths((prev) =>
+                                        prev.filter((x) => x !== p),
+                                      )
+                                    }
+                                    className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-zinc-600 bg-zinc-900 text-xs text-zinc-300 hover:bg-red-950/80"
+                                    aria-label="Retirer cette image"
+                                  >
+                                    ×
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                          <button
+                            type="button"
+                            disabled={pending || disputeDraft.trim().length < 10}
+                            onClick={() =>
+                              run(() =>
+                                matchSubmitDisputeTicket(
+                                  matchId,
+                                  disputeDraft.trim(),
+                                  disputeEvidencePaths,
+                                ),
+                              )
+                            }
+                            className="min-h-[3rem] rounded-xl border border-red-500/50 bg-red-950/30 px-5 py-3 font-mono text-xs font-semibold uppercase tracking-wider text-red-100 transition-colors hover:bg-red-500/20 disabled:opacity-40 sm:px-6"
+                          >
+                            Créer le ticket et ouvrir le litige
+                          </button>
+                          <button
+                            type="button"
+                            disabled={pending}
+                            onClick={() => {
+                              setDisputeFlowOpen(false);
+                              setDisputeEvidencePaths([]);
+                            }}
+                            className="text-sm text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline"
+                          >
+                            Annuler
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : hasMyClaim ? (
+                <div
+                  className="mt-6 flex flex-col items-center justify-center gap-4 rounded-xl border border-amber-500/35 bg-gradient-to-b from-amber-500/[0.07] to-zinc-950/55 px-5 py-8 sm:px-8 sm:py-10"
+                  role="status"
+                  aria-live="polite"
+                  aria-busy="true"
+                >
+                  <span
+                    className="inline-block h-9 w-9 shrink-0 animate-spin rounded-full border-2 border-amber-400/25 border-t-amber-400"
+                    aria-hidden
+                  />
+                  <p className="max-w-md text-center font-mono text-sm text-zinc-200 sm:text-base">
+                    En attente de la déclaration adverse…
+                  </p>
+                  <p className="max-w-md text-center text-xs leading-relaxed text-zinc-500 sm:text-sm">
+                    Ta déclaration est enregistrée. Dès que l&apos;autre joueur
+                    envoie la sienne, le score s&apos;affichera ici.
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-6 rounded-lg border border-dashed border-zinc-700/80 bg-zinc-950/40 px-4 py-4 text-center font-mono text-xs text-zinc-500 sm:text-sm">
+                  En attente de la déclaration de l&apos;adversaire…
+                </p>
+              )}
+
+              {hasOppClaim && !hasMyClaim ? (
+                <div
+                  className="mt-5 rounded-xl border border-amber-500/40 bg-amber-500/[0.12] px-4 py-3.5 text-sm leading-relaxed text-amber-100/95 sm:px-5"
+                  role="status"
+                >
+                  <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-wider text-amber-200/90">
+                    Action requise
+                  </p>
+                  <p className="mt-2 text-amber-50/95">
+                    L&apos;adversaire a déjà déclaré — envoie{" "}
+                    <strong className="font-semibold text-white">
+                      ta déclaration
+                    </strong>{" "}
+                    avec « Déclarer et envoyer mon score » (le même résultat
+                    qu&apos;indiqué ci-dessus) pour pouvoir clôturer le match.
+                  </p>
+                </div>
+              ) : null}
+
+              {canFinalizeMatch(m) ? (
+                <div className="mt-5 rounded-xl border border-emerald-500/35 bg-emerald-500/[0.08] px-4 py-3.5 text-sm text-emerald-100/95 sm:px-5">
+                  <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-wider text-emerald-300/95">
+                    Prêt à clôturer
+                  </p>
+                  <p className="mt-1.5 leading-relaxed">
+                    Passe à l&apos;{" "}
+                    <strong className="text-white">étape 3</strong> et clique sur
+                    « Terminer et enregistrer le match ».
+                  </p>
+                </div>
+              ) : null}
+
+              <div className="mt-8 border-t border-white/10 pt-6">
+                <p className="mb-3 font-mono text-[0.6rem] uppercase tracking-wider text-zinc-600">
+                  Suivi des déclarations
+                </p>
+                <ul className="grid gap-3 sm:grid-cols-2">
+                  <SummaryChip
+                    label="Ta déclaration"
+                    value={
+                      hasMyClaim
+                        ? `${myClaimA} — ${myClaimB}`
+                        : "Pas encore envoyée"
+                    }
+                    highlight={hasMyClaim}
+                  />
+                  <SummaryChip
+                    label="Déclaration adverse"
+                    value={
+                      hasOppClaim
+                        ? `${oppClaimA} — ${oppClaimB}`
+                        : "En attente"
+                    }
+                    highlight={hasOppClaim}
+                  />
+                </ul>
+              </div>
+            </>
+          )}
+        </section>
+      ) : null}
+
+      {/* 3. Clôture */}
+      {bothStarted && !confirmed ? (
+        <section
+          id="etape-cloture"
+          className="scroll-mt-6 rounded-2xl border border-white/12 bg-gradient-to-b from-zinc-950/80 to-zinc-950/40 px-4 py-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:px-7 sm:py-8 lg:px-8"
+        >
+          <div className="border-l-2 border-amber-500/35 pl-3 sm:pl-4">
+            <h2 className="match-arena-step-title font-mono text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-amber-500/90 sm:text-[0.7rem]">
+              <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded border border-amber-500/35 bg-amber-500/10 px-1.5 text-[0.6rem] text-amber-200">
+                3
+              </span>
+              <span>Clôturer le match</span>
+            </h2>
+            <p className="mt-3 max-w-prose text-sm leading-relaxed text-zinc-500 sm:text-[0.95rem]">
+              Quand les deux déclarations concordent (étape 2), ce bouton enregistre
+              le résultat. Les deux joueurs peuvent cliquer — une seule clôture
+              suffit.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={pending || finalizeDisabled}
+            onClick={() => run(() => matchFinalize(matchId))}
+            className={`game-btn-primary mt-6 w-full min-h-[3.25rem] px-6 py-4 font-[family-name:var(--font-bebas)] text-lg tracking-wide sm:max-w-xl sm:text-xl ${
+              finalizeDisabled ? "pointer-events-none opacity-40" : ""
+            }`}
+          >
+            <span>Terminer et enregistrer le match</span>
+          </button>
+          {finalizeDisabled && finalizeHintsList.length > 0 ? (
+            <div className="mt-5 rounded-xl border border-zinc-700/80 bg-zinc-950/50 px-4 py-4 sm:px-5">
+              <p className="font-mono text-[0.6rem] uppercase tracking-wider text-zinc-500">
+                Pour débloquer le bouton
+              </p>
+              <ul className="mt-3 list-inside list-disc space-y-2 text-sm leading-relaxed text-zinc-400">
+                {finalizeHintsList.map((line, i) => (
+                  <li key={`${i}-${line.slice(0, 24)}`}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {confirmed ? (
+        <p className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-4 py-4 text-center text-sm leading-relaxed text-emerald-400/95 sm:px-6">
+          Le résultat est enregistré. Retourne à{" "}
+          <Link
+            href="/play/recherche#rencontres-en-cours"
+            className="font-medium text-emerald-300 underline decoration-emerald-500/50 underline-offset-2 hover:text-emerald-200"
+          >
+            la recherche (liste des rencontres)
+          </Link>
+          , au{" "}
+          <Link
+            href="/play"
+            className="font-medium text-emerald-300 underline decoration-emerald-500/50 underline-offset-2 hover:text-emerald-200"
+          >
+            QG
+          </Link>{" "}
+          ou lance une{" "}
+          <Link
+            href="/play/recherche"
+            className="font-medium text-emerald-300 underline decoration-emerald-500/50 underline-offset-2 hover:text-emerald-200"
+          >
+            nouvelle recherche
+          </Link>
+          .
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function SummaryChip({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  highlight: boolean;
+}) {
+  return (
+    <li className="rounded-xl border border-white/10 bg-black/30 px-3 py-3 sm:px-4 sm:py-3.5">
+      <p className="font-mono text-[0.55rem] uppercase leading-snug tracking-wider text-zinc-600 sm:text-[0.6rem]">
+        {label}
+      </p>
+      <p
+        className={`mt-1.5 break-words font-mono text-sm font-medium leading-snug sm:text-[0.95rem] ${
+          highlight ? "text-amber-100/95" : "text-zinc-500"
+        }`}
+      >
+        {value}
+      </p>
+    </li>
+  );
+}
+
+function PlayerCard({
+  label,
+  roblox,
+  subtitle,
+  highlight,
+  started,
+  ranked,
+  matchClosed,
+  closedEloDelta,
+}: {
+  label: string;
+  roblox: string;
+  subtitle: string;
+  highlight: boolean;
+  started: boolean;
+  ranked: RankedStatsPublic | null;
+  matchClosed: boolean;
+  closedEloDelta: number | null;
+}) {
+  const classed =
+    ranked != null && isPlacementComplete(ranked.placement_matches_played);
+  return (
+    <div
+      className={`flex h-full w-full min-h-0 flex-col justify-between rounded-xl border p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:rounded-2xl sm:p-4 lg:p-6 ${
+        highlight
+          ? "border-amber-400/55 bg-gradient-to-b from-amber-500/20 via-amber-950/25 to-zinc-950/95 ring-1 ring-amber-400/25 shadow-[0_0_36px_rgba(245,158,11,0.12)]"
+          : "border-zinc-700/80 bg-gradient-to-b from-zinc-900/40 to-zinc-950/90"
+      }`}
+    >
+      <div className="min-w-0">
+        <p className="font-mono text-[0.45rem] uppercase tracking-[0.2em] text-zinc-500 sm:text-[0.55rem] sm:tracking-[0.28em] md:tracking-[0.3em]">
+          {subtitle}
+        </p>
+        <p className="game-title mt-1 break-words font-[family-name:var(--font-bebas)] text-xl leading-none tracking-wide text-white sm:mt-2 sm:text-3xl md:text-4xl lg:text-[2.5rem]">
+          {label}
+        </p>
+        <p className="mt-2 break-all font-mono text-[0.65rem] leading-snug sm:mt-3 sm:text-xs md:text-sm">
+          <span className="text-zinc-500">Roblox</span>
+          <span className="mx-1 text-zinc-600 sm:mx-1.5">·</span>
+          <span className="font-medium text-amber-300 drop-shadow-[0_0_12px_rgba(251,191,36,0.15)]">
+            {roblox}
+          </span>
+        </p>
+      </div>
+      <div className="mt-3 border-t border-white/10 pt-2 sm:mt-4 sm:pt-3">
+        <p className="font-mono text-[0.5rem] uppercase tracking-wider text-zinc-600 sm:text-[0.6rem]">
+          ELO
+        </p>
+        <p
+          className={`mt-1 font-mono text-xs sm:mt-1.5 sm:text-sm md:text-[0.95rem] ${
+            classed
+              ? "font-semibold tabular-nums text-amber-300/95 drop-shadow-[0_0_8px_rgba(251,191,36,0.12)]"
+              : "text-zinc-500"
+          }`}
+        >
+          {classed && ranked ? ranked.elo : "Non classé"}
+        </p>
+      </div>
+      {matchClosed ? (
+        <div className="mt-3 border-t border-white/10 pt-2 sm:mt-4 sm:pt-3">
+          <p className="font-mono text-[0.5rem] uppercase tracking-wider text-zinc-600 sm:text-[0.6rem]">
+            Ce match
+          </p>
+          {closedEloDelta != null ? (
+            <p
+              className={`mt-1 font-mono text-xs font-semibold tabular-nums sm:mt-1.5 sm:text-sm ${
+                closedEloDelta > 0
+                  ? "text-emerald-400/95"
+                  : closedEloDelta < 0
+                    ? "text-rose-300/95"
+                    : "text-zinc-400"
+              }`}
+            >
+              {closedEloDelta >= 0 ? "+" : ""}
+              {closedEloDelta} ELO
+            </p>
+          ) : (
+            <p className="mt-1 font-mono text-[0.55rem] leading-snug text-zinc-600 sm:text-[0.6rem]">
+              Variation non enregistrée
+            </p>
+          )}
+        </div>
+      ) : null}
+      <div className="mt-3 border-t border-white/10 pt-2 sm:mt-4 sm:pt-4 md:mt-5">
+        <p className="font-mono text-[0.5rem] uppercase tracking-wider text-zinc-600 sm:text-[0.6rem]">
+          Début confirmé
+        </p>
+        <p
+          className={`mt-1 font-mono text-xs sm:mt-1.5 sm:text-sm md:text-[0.95rem] ${started ? "font-semibold text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.25)]" : "text-zinc-500"}`}
+        >
+          {started ? "Oui" : "Non"}
+        </p>
+      </div>
+    </div>
+  );
+}

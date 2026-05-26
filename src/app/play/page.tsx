@@ -1,0 +1,140 @@
+import Link from "next/link";
+import { PlacementProgress } from "@/components/placement-progress";
+import { DEFAULT_ELO } from "@/lib/ranked";
+import { createClient } from "@/lib/supabase/server";
+
+export default async function PlayHomePage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const display =
+    (user?.user_metadata as { roblox_username?: string } | undefined)
+      ?.roblox_username ?? user?.email?.split("@")[0];
+
+  const initial = (display ?? "?").slice(0, 2).toUpperCase();
+
+  const { data: rankedRow } = user
+    ? await supabase
+        .from("player_ranked_stats")
+        .select("elo, placement_matches_played")
+        .eq("user_id", user.id)
+        .maybeSingle()
+    : { data: null };
+
+  const placementMatchesPlayed = rankedRow?.placement_matches_played ?? 0;
+  const elo = rankedRow?.elo ?? DEFAULT_ELO;
+
+  return (
+    <div className="space-y-10">
+      <div className="game-panel relative overflow-hidden rounded-xl p-6 sm:p-8">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-amber-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-12 -left-8 h-40 w-40 rounded-full bg-amber-500/8 blur-3xl" />
+
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-5">
+            <div className="relative">
+              <div className="absolute -inset-1 rounded-xl bg-gradient-to-br from-amber-500/35 to-amber-600/20 opacity-80 blur-sm" />
+              <div className="relative flex h-20 w-20 items-center justify-center rounded-xl border-2 border-amber-400/40 bg-zinc-950 font-[family-name:var(--font-bebas)] text-3xl tracking-wider text-amber-100 shadow-inner shadow-black/60">
+                {initial}
+              </div>
+            </div>
+            <div>
+              <p className="font-mono text-[0.65rem] uppercase tracking-[0.35em] text-amber-500/75">
+                Pilote connecté
+              </p>
+              <h1 className="game-title game-glitch-text font-[family-name:var(--font-bebas)] text-4xl tracking-[0.08em] text-white sm:text-5xl">
+                {display}
+              </h1>
+              <p className="mt-1 font-mono text-xs text-zinc-500">
+                ID session · {user?.id?.slice(0, 8)}…
+              </p>
+            </div>
+          </div>
+
+          <div className="w-full max-w-md rounded-xl border border-white/10 bg-black/25 p-4 lg:w-80 lg:p-5">
+            <PlacementProgress
+              elo={elo}
+              placementMatchesPlayed={placementMatchesPlayed}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h2 className="mb-4 font-mono text-[0.65rem] font-semibold uppercase tracking-[0.4em] text-amber-500/65">
+          Missions
+        </h2>
+        <ul className="grid gap-4 sm:grid-cols-2">
+          <li className="game-panel group rounded-xl p-6 transition hover:border-amber-400/30">
+            <div className="mb-3 inline-flex rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-wider text-amber-400/95">
+              PvP
+            </div>
+            <h3 className="font-[family-name:var(--font-bebas)] text-2xl tracking-wide text-white">
+              DÉFIS OUVERTS
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-500">
+              Liste des combats proposés — choisis un adversaire et accepte le
+              duel.
+            </p>
+            <Link
+              href="/play/defis"
+              className="game-btn-primary mt-6 inline-block px-6 py-3 font-[family-name:var(--font-bebas)] text-lg tracking-wide text-zinc-950"
+            >
+              <span>Entrer dans l&apos;arène</span>
+            </Link>
+          </li>
+          <li className="game-panel group rounded-xl p-6 transition hover:border-amber-400/30">
+            <div className="mb-3 inline-flex rounded border border-zinc-600/50 bg-zinc-800/50 px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-wider text-zinc-300">
+              File
+            </div>
+            <h3 className="font-[family-name:var(--font-bebas)] text-2xl tracking-wide text-white">
+              RECHERCHE
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-500">
+              Matchmaking automatique : le système te jumelle au prochain joueur
+              en attente.
+            </p>
+            <Link
+              href="/play/recherche"
+              className="game-btn-ghost mt-6 inline-block px-6 py-3 font-[family-name:var(--font-bebas)] text-lg tracking-wide text-amber-50"
+            >
+              <span>Lancer la recherche</span>
+            </Link>
+          </li>
+        </ul>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 border-t border-white/10 pt-6">
+        <Link
+          href="/play/mes-rencontres"
+          className="font-mono text-xs uppercase tracking-wider text-amber-500/80 hover:text-amber-400"
+        >
+          Historique rencontres
+        </Link>
+        <span className="text-zinc-700">|</span>
+        <Link
+          href="/play/recherche#rencontres-en-cours"
+          className="font-mono text-xs uppercase tracking-wider text-amber-500/80 hover:text-amber-400"
+        >
+          Recherche (liste)
+        </Link>
+        <span className="text-zinc-700">|</span>
+        <Link
+          href="/classement"
+          className="font-mono text-xs uppercase tracking-wider text-zinc-500 underline-offset-4 hover:text-amber-400/85 hover:underline"
+        >
+          Classement public
+        </Link>
+        <span className="text-zinc-700">|</span>
+        <Link
+          href="/"
+          className="font-mono text-xs uppercase tracking-wider text-zinc-500 hover:text-zinc-300"
+        >
+          Quitter le QG
+        </Link>
+      </div>
+    </div>
+  );
+}
