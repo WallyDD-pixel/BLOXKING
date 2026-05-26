@@ -27,6 +27,11 @@ Dans le projet Vercel : **Settings** → **Environment Variables**.
 | `YOUTUBE_API_KEY` | optionnel | Bloc live + dernière vidéo (quota Google ~10 000 unités/jour ; éviter `search.list` répété) |
 | `YOUTUBE_CHANNEL_HANDLE` | optionnel | ex. `warrenoff` (sans `@`) |
 | `DISPUTE_VIDEO_MAX_BYTES` | optionnel | Défaut 52428800 (50 Mo) |
+| `NEXT_PUBLIC_ADSENSE_CLIENT_ID` | optionnel | Pub Google AdSense (`ca-pub-…`) |
+| `NEXT_PUBLIC_ADSENSE_SLOT_SIDEBAR_LEFT` | optionnel | ID bloc pub colonne gauche |
+| `NEXT_PUBLIC_ADSENSE_SLOT_SIDEBAR_RIGHT` | optionnel | ID bloc pub colonne droite |
+| `NEXT_PUBLIC_ADSENSE_SLOT_BANNER_TOP` | optionnel | ID bannière horizontale sous le header |
+| `NEXT_PUBLIC_ADS_PLACEHOLDERS` | optionnel | `true` = cadres debug uniquement (jamais en prod) |
 
 **Important après la première mise en ligne**
 

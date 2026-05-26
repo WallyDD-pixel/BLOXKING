@@ -14,7 +14,7 @@ export default async function ConnexionPage({ searchParams }: Props) {
   const next = params.next;
 
   return (
-    <PageShell center>
+    <PageShell center ads={false}>
       <div className="mx-auto w-full max-w-md">
         <BackLink />
         <h1 className="mt-8 font-[family-name:var(--font-bebas)] text-4xl tracking-wide text-white sm:text-5xl">
