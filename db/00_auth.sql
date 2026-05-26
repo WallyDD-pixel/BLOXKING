@@ -1,7 +1,5 @@
--- Schéma minimal auth sans Supabase (PostgreSQL).
--- À exécuter sur ta DB (EC2) avant de lancer l'app.
-
-create extension if not exists pgcrypto;
+-- Schéma minimal auth sans Supabase (PostgreSQL 13+).
+-- gen_random_uuid() est intégré (pas besoin de pgcrypto).
 
 create table if not exists public.users (
   id uuid primary key default gen_random_uuid(),
@@ -21,4 +19,3 @@ create table if not exists public.sessions (
 
 create index if not exists idx_sessions_user_id on public.sessions(user_id);
 create index if not exists idx_sessions_expires_at on public.sessions(expires_at);
-

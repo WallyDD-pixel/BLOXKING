@@ -8,10 +8,20 @@ psql -U bloxking -d bloxking -h localhost -f db/00_auth.sql
 
 ## 2. Ranked (matchmaking, litiges, ELO)
 
+Si une migration a déjà échoué :
+
 ```bash
-npm run db:patch-ranked   # régénère db/01_ranked.sql depuis supabase/setup_bloxking_ranked.sql
+psql -U bloxking -d bloxking -h localhost -f db/98_reset_ranked.sql
+```
+
+Puis :
+
+```bash
+git pull   # récupère les SQL corrigés
 psql -U bloxking -d bloxking -h localhost -f db/01_ranked.sql
 ```
+
+(En dev local : `npm run db:patch-ranked` régénère `db/01_ranked.sql`.)
 
 ## 3. Stockage preuves (serveur)
 

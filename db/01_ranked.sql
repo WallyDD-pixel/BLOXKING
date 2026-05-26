@@ -1,19 +1,6 @@
--- Généré depuis supabase/setup_bloxking_ranked.sql (sans Supabase Auth/RLS/Storage)
+-- BLOXKING ranked (PostgreSQL local, sans Supabase)
 -- Prérequis: db/00_auth.sql
--- Exécuter: psql -U bloxking -d bloxking -h localhost -f db/01_ranked.sql
-
-﻿/*
-  ============================================================================
-  BLOXKING — À exécuter UNE FOIS sur ton projet Supabase (base vide ou nouvelle)
-  ============================================================================
-  1. Ouvre https://supabase.com → ton projet
-  2. Menu gauche : SQL Editor
-  3. New query
-  4. Colle TOUT ce fichier
-  5. Run (ou Ctrl+Enter)
-  6. Attends "Success" — puis réessaie "Initialiser la recherche" dans l’app
-  ============================================================================
-*/
+-- psql -U bloxking -d bloxking -h localhost -f db/01_ranked.sql
 
 create table if not exists public.open_challenges (
   id uuid primary key default gen_random_uuid(),
@@ -125,18 +112,6 @@ create index if not exists idx_match_dispute_tickets_match_id
 
 
 
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values (
-  'dispute-evidence',
-  'dispute-evidence',
-  true,
-  2621440,
-  array['image/jpeg', 'image/png', 'image/webp']::text[]
-)
-on conflict (id) do update set
-  public = excluded.public,
-  file_size_limit = excluded.file_size_limit,
-  allowed_mime_types = excluded.allowed_mime_types;
 
 
 
@@ -1052,7 +1027,7 @@ grant execute on function public.match_reset_after_dispute(uuid) to public;
 grant execute on function public.match_finalize(uuid) to public;
 grant execute on function public.match_post_dispute_chat_message(uuid, text) to public;
 grant execute on function public.expire_disputed_matches_after_ticket_timeout() to public;
-grant execute on function public.expire_disputed_matches_after_ticket_timeout() to service_role;
+grant execute on function public.expire_disputed_matches_after_ticket_timeout() to public;
 
 -- Réparation : recalcule elo_delta_a/b pour l’historique (matchs confirmés déjà traités).
 -- Exécution manuelle (SQL Editor, rôle service) : select public.repair_match_elo_delta_columns();
@@ -1153,6 +1128,5 @@ end;
 $$;
 
 revoke all on function public.repair_match_elo_delta_columns() from public;
-grant execute on function public.repair_match_elo_delta_columns() to service_role;
+grant execute on function public.repair_match_elo_delta_columns() to public;
 
-notify pgrst, 'reload schema';
