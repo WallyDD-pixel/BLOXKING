@@ -1,4 +1,6 @@
 import { unstable_cache } from "next/cache";
+import { getYoutubeChannelContext } from "@/lib/youtube/channel";
+import { youtubeApiKey } from "@/lib/youtube/config";
 import { fetchYoutubeJson, youtubeUrl } from "@/lib/youtube/fetch";
 
 export type YoutubeLiveStream = {
@@ -6,85 +8,106 @@ export type YoutubeLiveStream = {
   title: string;
 };
 
-const CACHE_SECONDS = 60;
+/** 5 min — détection live sans search.list (100 unités). */
+const CACHE_SECONDS = 5 * 60;
 
-function apiKey(): string | null {
-  const key = process.env.YOUTUBE_API_KEY?.trim();
-  if (!key || key === "ta_cle" || key === "ta_cle_api_google") return null;
-  return key;
-}
-
-function channelHandle(): string {
-  return (process.env.YOUTUBE_CHANNEL_HANDLE ?? "warrenoff").replace(/^@/, "");
-}
-
-type ChannelsResponse = {
-  items?: { id: string }[];
+type PlaylistItemsResponse = {
+  items?: Array<{
+    snippet?: {
+      title?: string;
+      resourceId?: { videoId?: string };
+    };
+  }>;
 };
 
-type SearchResponse = {
-  items?: {
-    id: { videoId?: string };
-    snippet: { title: string };
-  }[];
+type LiveStreamingDetails = {
+  actualStartTime?: string;
+  actualEndTime?: string;
 };
 
-async function resolveChannelId(key: string, handle: string): Promise<string | null> {
-  const url = youtubeUrl("channels", key, {
-    part: "id",
-    forHandle: handle,
-  });
-  const json = await fetchYoutubeJson<ChannelsResponse>(url, {
-    next: { revalidate: CACHE_SECONDS },
-  });
-  return json.ok ? json.data.items?.[0]?.id ?? null : null;
+type VideosResponse = {
+  items?: Array<{
+    id: string;
+    snippet?: { title?: string };
+    liveStreamingDetails?: LiveStreamingDetails;
+  }>;
+};
+
+function isCurrentlyLive(lsd?: LiveStreamingDetails): boolean {
+  if (!lsd?.actualStartTime) return false;
+  return !lsd.actualEndTime;
 }
 
-async function fetchLiveOnChannel(
+/**
+ * Détecte un live via la playlist uploads + videos.list (~2 unités)
+ * au lieu de search.list (100 unités).
+ */
+async function fetchLiveViaUploads(
   key: string,
-  channelId: string,
+  uploadsPlaylistId: string,
 ): Promise<YoutubeLiveStream | null> {
-  const url = youtubeUrl("search", key, {
+  const plUrl = youtubeUrl("playlistItems", key, {
     part: "snippet",
-    channelId,
-    type: "video",
-    eventType: "live",
-    maxResults: "1",
+    playlistId: uploadsPlaylistId,
+    maxResults: "8",
   });
-  const json = await fetchYoutubeJson<SearchResponse>(url, {
+  const pl = await fetchYoutubeJson<PlaylistItemsResponse>(plUrl, {
     next: { revalidate: CACHE_SECONDS },
   });
-  if (!json.ok) return null;
-  const item = json.data.items?.[0];
-  const videoId = item?.id?.videoId;
-  if (!videoId) return null;
+  if (!pl.ok) return null;
 
-  return {
-    videoId,
-    title: item.snippet.title,
-  };
+  const rows = pl.data.items ?? [];
+  const ids = rows
+    .map((r) => r.snippet?.resourceId?.videoId)
+    .filter((v): v is string => Boolean(v));
+  if (ids.length === 0) return null;
+
+  const titlesById = new Map<string, string>();
+  for (const row of rows) {
+    const id = row.snippet?.resourceId?.videoId;
+    const title = row.snippet?.title;
+    if (id && title) titlesById.set(id, title);
+  }
+
+  const vidUrl = youtubeUrl("videos", key, {
+    part: "snippet,liveStreamingDetails",
+    id: ids.join(","),
+  });
+  const vid = await fetchYoutubeJson<VideosResponse>(vidUrl, {
+    next: { revalidate: CACHE_SECONDS },
+  });
+  if (!vid.ok) return null;
+
+  for (const item of vid.data.items ?? []) {
+    if (!isCurrentlyLive(item.liveStreamingDetails)) continue;
+    return {
+      videoId: item.id,
+      title: item.snippet?.title ?? titlesById.get(item.id) ?? "Live",
+    };
+  }
+
+  return null;
 }
 
 async function fetchYoutubeLiveUncached(): Promise<YoutubeLiveStream | null> {
-  const key = apiKey();
+  const key = youtubeApiKey();
   if (!key) return null;
 
-  const handle = channelHandle();
-  const channelId = await resolveChannelId(key, handle);
-  if (!channelId) return null;
+  const ctx = await getYoutubeChannelContext();
+  if (!ctx) return null;
 
-  return fetchLiveOnChannel(key, channelId);
+  return fetchLiveViaUploads(key, ctx.uploadsPlaylistId);
 }
 
 const getCachedYoutubeLive = unstable_cache(
   fetchYoutubeLiveUncached,
-  ["youtube-live", "v2-prod"],
+  ["youtube-live", "v4-low-quota"],
   { revalidate: CACHE_SECONDS },
 );
 
 /** Retourne le live en cours sur la chaîne configurée, ou null si hors ligne / API absente. */
 export async function getYoutubeLiveStream(): Promise<YoutubeLiveStream | null> {
-  if (!apiKey()) return null;
+  if (!youtubeApiKey()) return null;
   return getCachedYoutubeLive();
 }
 

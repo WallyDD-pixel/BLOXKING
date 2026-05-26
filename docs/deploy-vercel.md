@@ -24,7 +24,7 @@ Dans le projet Vercel : **Settings** → **Environment Variables**.
 | `DATABASE_URL` | Production (et Preview si tu veux tester) | URL PostgreSQL (voir ci‑dessous) |
 | `DATABASE_SSL` | `true` si ton hébergeur Postgres impose SSL | Ex. Neon, Supabase, RDS avec SSL |
 | `NEXT_PUBLIC_SITE_URL` | Production | URL publique, ex. `https://bloxking.vercel.app` ou ton domaine |
-| `YOUTUBE_API_KEY` | optionnel | Bloc live + dernière vidéo |
+| `YOUTUBE_API_KEY` | optionnel | Bloc live + dernière vidéo (quota Google ~10 000 unités/jour ; éviter `search.list` répété) |
 | `YOUTUBE_CHANNEL_HANDLE` | optionnel | ex. `warrenoff` (sans `@`) |
 | `DISPUTE_VIDEO_MAX_BYTES` | optionnel | Défaut 52428800 (50 Mo) |
 

@@ -1,4 +1,6 @@
 import { unstable_cache } from "next/cache";
+import { getYoutubeChannelContext } from "@/lib/youtube/channel";
+import { youtubeApiKey } from "@/lib/youtube/config";
 import { fetchYoutubeJson, youtubeUrl } from "@/lib/youtube/fetch";
 
 export type YoutubeLatestVideo = {
@@ -13,29 +15,11 @@ const CACHE_SECONDS = 10 * 60;
 /** Durée min pour une « vraie » vidéo (Shorts ≤ ~3 min, souvent < 2 min). */
 const MIN_REGULAR_VIDEO_SECONDS = 120;
 
-function apiKey(): string | null {
-  const key = process.env.YOUTUBE_API_KEY?.trim();
-  if (!key || key === "ta_cle" || key === "ta_cle_api_google") return null;
-  return key;
-}
-
-function channelHandle(): string {
-  return (process.env.YOUTUBE_CHANNEL_HANDLE ?? "warrenoff").replace(/^@/, "");
-}
-
-type SearchItem = {
-  id: { videoId?: string };
-  snippet: {
-    title: string;
-    publishedAt: string;
-    thumbnails?: Record<string, { url: string }>;
-  };
-};
-
-type ChannelDetailResponse = {
-  items?: Array<{
-    contentDetails?: { relatedPlaylists?: { uploads?: string } };
-  }>;
+type UploadCandidate = {
+  videoId: string;
+  title: string;
+  publishedAt: string;
+  thumbnailUrl: string | null;
 };
 
 type PlaylistItemsResponse = {
@@ -47,10 +31,6 @@ type PlaylistItemsResponse = {
       thumbnails?: Record<string, { url: string }>;
     };
   }>;
-};
-
-type SearchResponse = {
-  items?: SearchItem[];
 };
 
 type VideoDetail = {
@@ -68,37 +48,18 @@ type VideosResponse = {
   }>;
 };
 
-async function fetchUploadsPlaylistId(
-  key: string,
-  handle: string,
-): Promise<string | null> {
-  const url = youtubeUrl("channels", key, {
-    part: "contentDetails",
-    forHandle: handle,
-  });
-  const json = await fetchYoutubeJson<ChannelDetailResponse>(url, {
-    next: { revalidate: CACHE_SECONDS },
-  });
-  if (!json.ok) return null;
-  return json.data.items?.[0]?.contentDetails?.relatedPlaylists?.uploads ?? null;
-}
-
-function mapPlaylistItemsToCandidates(
-  resp: PlaylistItemsResponse,
-): SearchItem[] {
-  const out: SearchItem[] = [];
+function mapPlaylistItems(resp: PlaylistItemsResponse): UploadCandidate[] {
+  const out: UploadCandidate[] = [];
   for (const row of resp.items ?? []) {
-    const vid = row.snippet?.resourceId?.videoId;
+    const videoId = row.snippet?.resourceId?.videoId;
     const title = row.snippet?.title;
     const publishedAt = row.snippet?.publishedAt;
-    if (!vid || title === undefined || !publishedAt) continue;
+    if (!videoId || title === undefined || !publishedAt) continue;
     out.push({
-      id: { videoId: vid },
-      snippet: {
-        title,
-        publishedAt,
-        thumbnails: row.snippet?.thumbnails,
-      },
+      videoId,
+      title,
+      publishedAt,
+      thumbnailUrl: pickThumbUrl(row.snippet?.thumbnails),
     });
   }
   return out;
@@ -107,46 +68,23 @@ function mapPlaylistItemsToCandidates(
 async function fetchCandidatesFromUploadsPlaylist(
   key: string,
   playlistId: string,
-): Promise<SearchItem[]> {
+): Promise<UploadCandidate[]> {
   const url = youtubeUrl("playlistItems", key, {
     part: "snippet",
     playlistId,
-    maxResults: "50",
+    maxResults: "30",
   });
   const json = await fetchYoutubeJson<PlaylistItemsResponse>(url, {
     next: { revalidate: CACHE_SECONDS },
   });
   if (!json.ok) return [];
-  return mapPlaylistItemsToCandidates(json.data);
+  return mapPlaylistItems(json.data);
 }
 
-/** Fallback si la playlist uploads échoue (quota / chaîne très récente). */
-async function fetchCandidatesViaSearch(
-  key: string,
-  channelId: string,
-): Promise<SearchItem[]> {
-  // medium = 4–20 min, long = >20 min → exclut les Shorts et clips très courts
-  for (const duration of ["medium", "long"] as const) {
-    const url = youtubeUrl("search", key, {
-      part: "snippet",
-      channelId,
-      order: "date",
-      type: "video",
-      videoDuration: duration,
-      maxResults: "10",
-    });
-    const json = await fetchYoutubeJson<SearchResponse>(url, {
-      next: { revalidate: CACHE_SECONDS },
-    });
-    if (json.ok && (json.data.items?.length ?? 0) > 0) {
-      return json.data.items ?? [];
-    }
-  }
-  return [];
-}
-
-function pickThumbUrl(item: SearchItem): string | null {
-  const t = item.snippet.thumbnails ?? {};
+function pickThumbUrl(
+  thumbnails?: Record<string, { url: string }>,
+): string | null {
+  const t = thumbnails ?? {};
   return (
     t.maxres?.url ??
     t.standard?.url ??
@@ -165,18 +103,6 @@ function parseIso8601DurationSeconds(duration?: string): number | null {
   const min = m[2] ? Number(m[2]) : 0;
   const s = m[3] ? Number(m[3]) : 0;
   return h * 3600 + min * 60 + s;
-}
-
-async function resolveChannelIdForSearch(
-  key: string,
-  handle: string,
-): Promise<string | null> {
-  const url = youtubeUrl("channels", key, { part: "id", forHandle: handle });
-  const json = await fetchYoutubeJson<{ items?: { id: string }[] }>(url, {
-    next: { revalidate: CACHE_SECONDS },
-  });
-  if (!json.ok) return null;
-  return json.data.items?.[0]?.id ?? null;
 }
 
 function looksLikeShort(title: string, tags: string[]): boolean {
@@ -207,66 +133,50 @@ async function fetchVideoDetails(
   const map = new Map<string, VideoDetail>();
   if (videoIds.length === 0) return map;
 
-  const chunkSize = 50;
-  for (let i = 0; i < videoIds.length; i += chunkSize) {
-    const chunk = videoIds.slice(i, i + chunkSize);
-    const url = youtubeUrl("videos", key, {
-      part: "snippet,contentDetails,liveStreamingDetails",
-      id: chunk.join(","),
+  const url = youtubeUrl("videos", key, {
+    part: "snippet,contentDetails,liveStreamingDetails",
+    id: videoIds.join(","),
+  });
+  const json = await fetchYoutubeJson<VideosResponse>(url, {
+    next: { revalidate: CACHE_SECONDS },
+  });
+  if (!json.ok) return map;
+
+  for (const item of json.data.items ?? []) {
+    map.set(item.id, {
+      seconds: parseIso8601DurationSeconds(item.contentDetails?.duration),
+      isLive: Boolean(item.liveStreamingDetails),
+      tags: item.snippet?.tags ?? [],
     });
-    const json = await fetchYoutubeJson<VideosResponse>(url, {
-      next: { revalidate: CACHE_SECONDS },
-    });
-    if (!json.ok) continue;
-    for (const item of json.data.items ?? []) {
-      map.set(item.id, {
-        seconds: parseIso8601DurationSeconds(item.contentDetails?.duration),
-        isLive: Boolean(item.liveStreamingDetails),
-        tags: item.snippet?.tags ?? [],
-      });
-    }
   }
   return map;
 }
 
 async function fetchLatestVideoUncached(): Promise<YoutubeLatestVideo | null> {
-  const key = apiKey();
+  const key = youtubeApiKey();
   if (!key) return null;
 
-  const handle = channelHandle();
+  const ctx = await getYoutubeChannelContext();
+  if (!ctx) return null;
 
-  let candidates: SearchItem[] = [];
+  const candidates = await fetchCandidatesFromUploadsPlaylist(
+    key,
+    ctx.uploadsPlaylistId,
+  );
+  if (candidates.length === 0) return null;
 
-  const uploadsId = await fetchUploadsPlaylistId(key, handle);
-  if (uploadsId) {
-    candidates = await fetchCandidatesFromUploadsPlaylist(key, uploadsId);
-  }
-
-  if (candidates.length === 0) {
-    const channelId = await resolveChannelIdForSearch(key, handle);
-    if (channelId) {
-      candidates = await fetchCandidatesViaSearch(key, channelId);
-    }
-  }
-
-  const ids = candidates
-    .map((c) => c.id.videoId)
-    .filter((v): v is string => Boolean(v));
-
-  const details = await fetchVideoDetails(key, ids);
+  const details = await fetchVideoDetails(
+    key,
+    candidates.map((c) => c.videoId),
+  );
 
   for (const item of candidates) {
-    const videoId = item.id.videoId;
-    if (!videoId) continue;
-
-    const title = item.snippet.title;
-    if (!isRegularVideo(title, details.get(videoId))) continue;
-
+    if (!isRegularVideo(item.title, details.get(item.videoId))) continue;
     return {
-      videoId,
-      title,
-      publishedAt: item.snippet.publishedAt,
-      thumbnailUrl: pickThumbUrl(item),
+      videoId: item.videoId,
+      title: item.title,
+      publishedAt: item.publishedAt,
+      thumbnailUrl: item.thumbnailUrl,
     };
   }
 
@@ -275,12 +185,12 @@ async function fetchLatestVideoUncached(): Promise<YoutubeLatestVideo | null> {
 
 const getCachedLatestVideo = unstable_cache(
   fetchLatestVideoUncached,
-  ["youtube-latest-video", "v3-prod"],
+  ["youtube-latest-video", "v4-low-quota"],
   { revalidate: CACHE_SECONDS },
 );
 
 /** Dernière vidéo "normale" (pas short), ou null si indisponible. */
 export async function getYoutubeLatestVideo(): Promise<YoutubeLatestVideo | null> {
-  if (!apiKey()) return null;
+  if (!youtubeApiKey()) return null;
   return getCachedLatestVideo();
 }
