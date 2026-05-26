@@ -69,7 +69,7 @@ const features = [
   },
   {
     title: "Matchs sérieux",
-    desc: "Chaque résultat peut être confirmé par les deux joueurs pour garder un ladder crédible.",
+    desc: "Double validation des scores — enregistre le combat pour te protéger si un litige survient.",
     Icon: IconShield,
   },
   {

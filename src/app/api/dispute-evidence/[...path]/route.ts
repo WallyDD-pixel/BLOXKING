@@ -1,18 +1,10 @@
-import { readFile } from "fs/promises";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { dbQueryOne } from "@/lib/db/query";
-import { disputeEvidenceAbsolutePath } from "@/lib/storage/dispute-evidence-server";
-
-const MIME: Record<string, string> = {
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-};
+import { serveDisputeEvidenceFile } from "@/lib/storage/dispute-evidence-stream";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   ctx: { params: Promise<{ path: string[] }> },
 ) {
   const user = await getCurrentUser();
@@ -35,26 +27,9 @@ export async function GET(
     return new NextResponse("Interdit", { status: 403 });
   }
 
-  let full: string;
   try {
-    full = disputeEvidenceAbsolutePath(objectPath);
-  } catch {
-    return new NextResponse("Chemin invalide", { status: 400 });
-  }
-
-  let buf: Buffer;
-  try {
-    buf = await readFile(full);
+    return await serveDisputeEvidenceFile(objectPath, request);
   } catch {
     return new NextResponse("Fichier introuvable", { status: 404 });
   }
-
-  const ext = segs[3]?.split(".").pop()?.toLowerCase() ?? "";
-  const contentType = MIME[ext] ?? "application/octet-stream";
-  return new NextResponse(new Uint8Array(buf), {
-    headers: {
-      "Content-Type": contentType,
-      "Cache-Control": "private, max-age=3600",
-    },
-  });
 }

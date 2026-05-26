@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { MatchmakingSearchBadge } from "@/components/matchmaking-search-badge";
+import { PlayAreaPvpTip } from "@/components/play-area-pvp-tip";
 import { PlayHudFrame } from "@/components/play-hud-frame";
 import { PlayNav } from "@/components/play-nav";
 import { PageShell } from "@/components/page-shell";
@@ -18,6 +19,7 @@ export default async function PlayLayout({ children }: { children: ReactNode }) 
       <div className="mx-auto w-full max-w-6xl flex-1">
         <PlayHudFrame>
           <PlayNav />
+          <PlayAreaPvpTip />
           <MatchmakingSearchBadge userId={user.id} />
           {children}
         </PlayHudFrame>

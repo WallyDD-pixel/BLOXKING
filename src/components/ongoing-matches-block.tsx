@@ -49,7 +49,11 @@ export function OngoingMatchesBlock({
       </h2>
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-500">
         Matchs non terminés (déclaration ou clôture en attente). Clique pour
-        rejoindre la salle.
+        rejoindre la salle. Si tu joues maintenant,{" "}
+        <strong className="font-medium text-zinc-400">
+          enregistre le combat
+        </strong>{" "}
+        — preuve utile en cas de litige.
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">

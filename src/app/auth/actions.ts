@@ -76,9 +76,10 @@ export async function signup(
   const origin = await getOrigin(); // conservé (emails possibles plus tard)
   void origin;
 
+  let row: { id: string } | null;
   try {
     const passwordHash = await hashPassword(password);
-    const row = await dbQueryOne<{ id: string }>(
+    row = await dbQueryOne<{ id: string }>(
       `
       insert into public.users (email, password_hash, roblox_username, display_name)
       values ($1, $2, $3, $4)
@@ -86,12 +87,8 @@ export async function signup(
       `,
       [email.toLowerCase(), passwordHash, robloxUsername, robloxUsername],
     );
-
-    if (!row?.id) return { error: "Impossible de créer le compte.", success: null };
-    await createSession(row.id);
-    redirect("/play");
   } catch (e: unknown) {
-    const msg = e && typeof e === "object" && "message" in e ? String((e as any).message) : "Erreur";
+    const msg = e && typeof e === "object" && "message" in e ? String((e as { message: string }).message) : "Erreur";
     if (isEmailAlreadyRegistered(msg)) {
       return {
         error:
@@ -103,10 +100,9 @@ export async function signup(
     return { error: mapAuthError(msg), success: null };
   }
 
-  return {
-    error: null,
-    success: "Compte créé.",
-  };
+  if (!row?.id) return { error: "Impossible de créer le compte.", success: null };
+  await createSession(row.id);
+  redirect("/play");
 }
 
 export async function login(

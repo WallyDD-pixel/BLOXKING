@@ -129,6 +129,7 @@ declare
   p text;
   parts text[];
   n int;
+  video_count int := 0;
 begin
   n := cardinality(coalesce(p_paths, '{}'));
   if n > 5 then
@@ -152,10 +153,16 @@ begin
     if parts[3] is distinct from p_uid::text then
       return false;
     end if;
-    if parts[4] !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpe?g|png|webp)$' then
+    if parts[4] !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpe?g|png|webp|mp4|webm)$' then
       return false;
     end if;
+    if parts[4] ~ '\.(mp4|webm)$' then
+      video_count := video_count + 1;
+    end if;
   end loop;
+  if video_count > 1 then
+    return false;
+  end if;
   return true;
 end;
 $$;

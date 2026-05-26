@@ -1,5 +1,6 @@
 import { BackLink } from "@/components/back-link";
 import { ContentCard } from "@/components/content-card";
+import { PvpRecordingTip } from "@/components/pvp-recording-tip";
 import { PageShell } from "@/components/page-shell";
 import { getCurrentUser } from "@/lib/auth/session";
 import { dbQuery } from "@/lib/db/query";
@@ -39,6 +40,7 @@ export default async function ClassementPage() {
           ELO ranked (départ 1000, placement {PLACEMENT_TOTAL} parties). Mis à jour
           à chaque match confirmé.
         </p>
+        <PvpRecordingTip variant="compact" className="mt-6" showFairPlayLink />
 
         <ContentCard className="mt-8">
           {showError ? (

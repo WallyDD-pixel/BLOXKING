@@ -32,7 +32,8 @@ export default async function RecherchePage() {
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-500">
           File d&apos;attente : le moteur te jumelle avec le prochain pilote
-          disponible.
+          disponible. Lance l&apos;enregistrement du combat avant le premier
+          round — c&apos;est ta meilleure protection si le score est contesté.
         </p>
       </div>
 

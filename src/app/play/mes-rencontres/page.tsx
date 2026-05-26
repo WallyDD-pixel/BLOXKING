@@ -105,7 +105,10 @@ export default async function MesRencontresPage() {
           Toutes tes parties ranked récentes : résultats,{" "}
           <strong className="font-medium text-zinc-300">LP gagnées ou perdues</strong>{" "}
           après clôture, annulations et matchs encore ouverts. Clique sur une
-          ligne pour ouvrir la salle de rencontre.
+          ligne pour ouvrir la salle de rencontre. En litige, joins des captures
+          ou extraits de ton{" "}
+          <strong className="font-medium text-zinc-300">enregistrement du combat</strong>{" "}
+          au ticket modération.
         </p>
       </header>
 

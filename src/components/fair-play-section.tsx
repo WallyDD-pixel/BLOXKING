@@ -1,3 +1,6 @@
+import { PvpRecordingTip } from "@/components/pvp-recording-tip";
+import { PVP_RECORDING_DISPUTE_HINT } from "@/lib/pvp-recording-copy";
+
 const points = [
   {
     title: "Double validation",
@@ -9,7 +12,7 @@ const points = [
   },
   {
     title: "Litiges & preuves",
-    text: "En cas de désaccord, le match peut passer en litige. On pourra demander une courte preuve (capture / clip) ou une décision des modérateurs, selon les règles affichées sur la plateforme.",
+    text: `En cas de désaccord, le match passe en litige : ticket modération, chat entre joueurs, captures ou extraits vidéo. ${PVP_RECORDING_DISPUTE_HINT}`,
   },
   {
     title: "Limite technique",
@@ -35,6 +38,8 @@ export function FairPlaySection() {
           cas où les joueurs ne sont pas d&apos;accord — avant même que tout soit
           automatisé dans l&apos;app, les principes sont les mêmes.
         </p>
+
+        <PvpRecordingTip variant="callout" className="mt-8" />
 
         <ul className="mt-8 space-y-5">
           {points.map((p) => (

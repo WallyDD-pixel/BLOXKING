@@ -34,4 +34,13 @@ Dans `.env.local` :
 
 ```
 DISPUTE_EVIDENCE_DIR=/var/bloxking/dispute-evidence
+DISPUTE_VIDEO_MAX_BYTES=52428800
 ```
+
+## 4. Vidéos sur les tickets litige (base déjà en prod)
+
+```bash
+psql -U bloxking -d bloxking -h localhost -f db/02_dispute_video_attachments.sql
+```
+
+Règles : **1 vidéo max** par message (MP4/WebM, ~50 Mo), jusqu’à **5 pièces jointes** au total (images + vidéo). Lecture en **streaming** (pas de chargement complet en RAM).

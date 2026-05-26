@@ -26,7 +26,16 @@ import {
   type DisputeTicketRow,
 } from "@/app/play/actions";
 import { isPlacementComplete, type RankedStatsPublic } from "@/lib/ranked";
-import { disputeEvidencePublicUrl } from "@/lib/storage/dispute-evidence-url";
+import { DisputeEvidencePreview } from "@/components/match/dispute-evidence-preview";
+import { DisputeEvidenceUpload } from "@/components/match/dispute-evidence-upload";
+import { MatchOpponentChatWidget } from "@/components/match/match-opponent-chat-widget";
+import { PvpRecordingTip } from "@/components/pvp-recording-tip";
+import {
+  countVideosInPaths,
+  DISPUTE_MAX_ATTACHMENTS,
+  DISPUTE_MAX_VIDEOS_PER_BATCH,
+} from "@/lib/dispute-evidence";
+import { PVP_RECORDING_DISPUTE_HINT } from "@/lib/pvp-recording-copy";
 
 export type MatchArenaRow = {
   id: string;
@@ -106,7 +115,7 @@ function claimsMatch(m: MatchArenaRow): boolean {
 function canFinalizeMatch(m: MatchArenaRow): boolean {
   if (m.status === "confirmed") return false;
   if (!m.match_started_a || !m.match_started_b) return false;
-  if (m.dispute) return false;
+  if (m.dispute || m.status === "disputed") return false;
   if (!claimsMatch(m)) return false;
   return true;
 }
@@ -118,8 +127,10 @@ function finalizeHints(m: MatchArenaRow, viewerIsA: boolean): string[] {
   if (!m.match_started_a || !m.match_started_b) {
     hints.push("Les deux joueurs doivent confirmer le début (étape 1).");
   }
-  if (m.dispute) {
-    hints.push("Un litige est ouvert : réinitialise ou réglez-le avant la clôture.");
+  if (m.dispute || m.status === "disputed") {
+    hints.push(
+      "Un litige est ouvert : modifie ta déclaration (étape 2) pour vous mettre d’accord, ou réinitialise la saisie.",
+    );
   }
 
   const mySent = viewerIsA
@@ -201,8 +212,10 @@ export function MatchArenaClient({
   const oppClaimB = isA ? m.claim_from_b_maps_b : m.claim_from_a_maps_b;
   const hasOppClaim = oppClaimA != null && oppClaimB != null;
 
-  /** Les deux déclarations concordent : plus de modification côté formulaire. */
-  const scoreLocked = claimsMatch(m);
+  const inDispute = !!(m.dispute || m.status === "disputed");
+
+  /** Accord des deux déclarations : verrouillé sauf en litige (où on peut corriger). */
+  const scoreLocked = claimsMatch(m) && !inDispute;
 
   const finalizeHintsList = useMemo(
     () => finalizeHints(m, isA),
@@ -275,24 +288,33 @@ export function MatchArenaClient({
   const appendEvidenceFiles = useCallback(
     async (
       fileList: FileList | null,
-      currentLen: number,
+      currentPaths: string[],
       setPaths: Dispatch<SetStateAction<string[]>>,
     ) => {
       if (!fileList?.length) return;
-      const room = 5 - currentLen;
+      const room = DISPUTE_MAX_ATTACHMENTS - currentPaths.length;
       if (room <= 0) return;
       const files = Array.from(fileList).slice(0, room);
       setEvidenceBusy(true);
       setErr(null);
+      let batch = [...currentPaths];
       try {
         for (const file of files) {
+          const maybeVideo =
+            file.type.startsWith("video/") ||
+            /\.(mp4|webm)$/i.test(file.name);
+          if (maybeVideo && countVideosInPaths(batch) >= DISPUTE_MAX_VIDEOS_PER_BATCH) {
+            setErr("Une seule vidéo par message (max. 50 Mo, MP4 ou WebM).");
+            return;
+          }
           const res = await uploadMatchDisputeEvidence(matchId, file);
           if ("error" in res && res.error) {
             setErr(res.error);
             return;
           }
           if ("path" in res && res.path) {
-            setPaths((prev) => [...prev, res.path]);
+            batch = [...batch, res.path];
+            setPaths(batch);
           }
         }
       } finally {
@@ -548,104 +570,6 @@ export function MatchArenaClient({
         </p>
       </div>
 
-      {/* Chat dès l’ouverture du match (pending / disputed, jusqu’à clôture) */}
-      {!confirmed ? (
-        <section className="game-panel rounded-2xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/15 px-4 py-4 sm:px-5 sm:py-5">
-            <p className="font-mono text-sm font-semibold uppercase tracking-wider text-emerald-200/95">
-              Chat avec l&apos;adversaire
-            </p>
-            {m.dispute || m.status === "disputed" ? (
-              <p className="mt-2 text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
-                Même fil qu&apos;en phase normale : en litige, sert aussi à
-                négocier. Les preuves officielles passent par le dossier
-                modération (étape 2 si litige ouvert).
-              </p>
-            ) : (
-              <p className="mt-2 text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
-                Disponible tout de suite : salon Roblox, horaires, confirmation
-                que vous êtes prêts, etc. Visible uniquement par vous deux (pas
-                l&apos;équipe). Le chat reste actif si un litige est ouvert plus
-                bas.
-              </p>
-            )}
-            <ul
-              className="mt-4 max-h-64 space-y-2 overflow-y-auto rounded-lg border border-white/10 bg-black/25 p-3 sm:max-h-80"
-              aria-label="Messages avec l&apos;adversaire"
-            >
-              {chatMessages.length === 0 ? (
-                <li className="text-center text-sm text-zinc-500">
-                  Aucun message — dis bonjour ou propose un salon pour jouer.
-                </li>
-              ) : (
-                chatMessages.map((msg) => {
-                  const mine = msg.author_id === userId;
-                  const when = new Date(msg.created_at).toLocaleString(
-                    "fr-FR",
-                    { dateStyle: "short", timeStyle: "short" },
-                  );
-                  return (
-                    <li
-                      key={msg.id}
-                      className={`rounded-lg border px-3 py-2.5 text-sm ${
-                        mine
-                          ? "border-emerald-500/25 bg-emerald-950/30 text-zinc-100"
-                          : "border-white/10 bg-zinc-950/70 text-zinc-200"
-                      }`}
-                    >
-                      <p className="font-mono text-[0.55rem] text-zinc-500">
-                        {mine ? "Toi" : "Adversaire"} · {when}
-                      </p>
-                      <p className="mt-1 whitespace-pre-wrap leading-relaxed">
-                        {msg.body}
-                      </p>
-                    </li>
-                  );
-                })
-              )}
-            </ul>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
-              <textarea
-                value={chatDraft}
-                onChange={(e) => setChatDraft(e.target.value)}
-                rows={2}
-                maxLength={2000}
-                placeholder="Salon, horaire, ready ? …"
-                className="min-h-[4rem] w-full flex-1 resize-y rounded-xl border border-white/12 bg-zinc-950/85 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500/35 focus:outline-none focus:ring-1 focus:ring-emerald-500/25"
-                aria-label="Message pour l&apos;adversaire"
-              />
-              <button
-                type="button"
-                disabled={pending || chatDraft.trim().length < 1}
-                onClick={() => {
-                  const text = chatDraft.trim();
-                  if (text.length < 1) return;
-                  setErr(null);
-                  startTransition(() => {
-                    void (async () => {
-                      const res = await postDisputeChatMessage(matchId, text);
-                      if (res && "error" in res && res.error) {
-                        setErr(res.error);
-                        return;
-                      }
-                      setChatDraft("");
-                      await refreshDisputeThreads();
-                      router.refresh();
-                    })();
-                  });
-                }}
-                className="game-btn-primary min-h-[2.75rem] shrink-0 px-5 py-2.5 text-sm disabled:opacity-40"
-              >
-                Envoyer
-              </button>
-            </div>
-            <p className="mt-1 font-mono text-[0.55rem] text-zinc-600">
-              {chatDraft.trim().length}/2000
-            </p>
-          </div>
-        </section>
-      ) : null}
-
       {/* 1. Début mutuel */}
       {!confirmed ? (
         <section className="game-panel rounded-2xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
@@ -658,9 +582,19 @@ export function MatchArenaClient({
             </h2>
             <p className="mt-3 max-w-prose text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
               Les deux joueurs doivent confirmer que la partie a bien commencé en
-              jeu avant la saisie du score.
+              jeu avant la saisie du score.{" "}
+              <strong className="font-medium text-zinc-200">
+                Lance l&apos;enregistrement du combat maintenant
+              </strong>{" "}
+              : en cas de litige, c&apos;est ta preuve la plus fiable. Pour parler
+              à l&apos;adversaire (salon, ready…), ouvre la{" "}
+              <strong className="font-medium text-emerald-300/95">
+                bulle Messages
+              </strong>{" "}
+              en bas à droite.
             </p>
           </div>
+          <PvpRecordingTip variant="callout" className="mt-6" />
           <div className="mt-6 flex flex-col gap-4 sm:mt-7 sm:flex-row sm:flex-wrap sm:items-center sm:gap-5">
             {myStarted ? (
               <div className="flex w-full min-h-[3rem] items-center justify-center gap-3 rounded-xl border border-emerald-500/35 bg-emerald-500/[0.09] px-5 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:w-auto">
@@ -724,11 +658,16 @@ export function MatchArenaClient({
             <p className="mt-3 max-w-prose text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
               Choisis le résultat final (premier à 2 manches) et envoie ta
               déclaration. L&apos;adversaire fait pareil de son côté — les deux
-              doivent indiquer le même score pour clôturer.
+              doivent indiquer le même score pour clôturer. Garde ton enregistrement
+              combat sous la main si le score est contesté.
             </p>
           </div>
 
-          {m.dispute || m.status === "disputed" ? (
+          {!inDispute ? (
+            <PvpRecordingTip variant="compact" className="mt-6" />
+          ) : null}
+
+          {inDispute ? (
             <div className="mt-6 space-y-6 rounded-xl border border-amber-600/45 bg-gradient-to-br from-amber-500/12 to-zinc-950/60 px-4 py-5 sm:px-6 sm:py-6">
               <div className="rounded-xl border border-amber-500/35 bg-black/30 px-4 py-4 sm:px-5 sm:py-5">
                 <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-amber-200/95">
@@ -738,13 +677,17 @@ export function MatchArenaClient({
                   <p className="mt-3 text-sm leading-relaxed text-zinc-300 sm:text-[0.95rem]">
                     Un litige est actif sur ce match. Utilise le{" "}
                     <strong className="font-medium text-zinc-100">
-                      chat vert en haut de la page
+                      bulle Messages en bas à droite
                     </strong>{" "}
-                    pour tenter de vous mettre d&apos;accord, et le{" "}
+                    pour tenter de vous mettre d&apos;accord, le{" "}
                     <strong className="font-medium text-zinc-100">
                       dossier modération
                     </strong>{" "}
-                    ci-dessous pour envoyer des preuves à l&apos;équipe.
+                    pour les preuves, ou{" "}
+                    <strong className="font-medium text-zinc-100">
+                      modifiez vos déclarations
+                    </strong>{" "}
+                    plus bas si vous convenez du même score.
                   </p>
                 ) : firstTicketOpenerId === userId ? (
                   <p className="mt-3 text-sm leading-relaxed text-zinc-300 sm:text-[0.95rem]">
@@ -759,9 +702,13 @@ export function MatchArenaClient({
                     </strong>{" "}
                     dans le fil modération et{" "}
                     <strong className="font-medium text-zinc-100">
-                      discuter avec toi dans le chat en haut
+                      discuter avec toi via la bulle Messages
+                    </strong>
+                    . Tu peux aussi{" "}
+                    <strong className="font-medium text-zinc-100">
+                      corriger ta déclaration
                     </strong>{" "}
-                    pour trouver une solution.
+                    ci-dessous si vous vous alignez sur le score.
                   </p>
                 ) : (
                   <p className="mt-3 text-sm leading-relaxed text-zinc-300 sm:text-[0.95rem]">
@@ -775,11 +722,15 @@ export function MatchArenaClient({
                     </strong>{" "}
                     (captures, explications) via les messages modération, et{" "}
                     <strong className="font-medium text-zinc-100">
-                      échange dans le chat en haut
+                      échange via la bulle Messages
                     </strong>{" "}
                     pour clarifier le score ou convenir d&apos;un arrangement.
-                    Tant que le litige est ouvert, le match ne peut pas être
-                    clôturé.
+                    Vous pouvez aussi{" "}
+                    <strong className="font-medium text-zinc-100">
+                      modifier vos déclarations
+                    </strong>{" "}
+                    ci-dessous : si les deux scores concordent, le litige se
+                    lève automatiquement.
                   </p>
                 )}
                 <p className="mt-3 border-t border-white/10 pt-3 font-mono text-[0.55rem] leading-relaxed text-zinc-500">
@@ -789,15 +740,21 @@ export function MatchArenaClient({
                 </p>
               </div>
 
+              <PvpRecordingTip variant="compact" />
+
               <div>
                 <p className="font-mono text-sm font-semibold uppercase tracking-wider text-amber-200">
                   Dossier modération (équipe)
                 </p>
                 <p className="mt-3 text-sm leading-relaxed text-zinc-300 sm:text-[0.95rem]">
                   Chaque entrée ci-dessous documente le litige pour les
-                  modérateurs (faits, captures). Les deux joueurs y ont accès en
-                  lecture. Utilise « Ajouter un message » pour compléter le
-                  dossier si besoin.
+                  modérateurs (faits, captures, extraits vidéo). Les deux joueurs y
+                  ont accès en lecture. Utilise « Ajouter un message » pour
+                  compléter le dossier —{" "}
+                  <strong className="font-medium text-zinc-100">
+                    une vidéo ou un clip du combat
+                  </strong>{" "}
+                  vaut mieux qu&apos;un simple texte. {PVP_RECORDING_DISPUTE_HINT}
                 </p>
               </div>
 
@@ -823,21 +780,19 @@ export function MatchArenaClient({
                         <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
                           {t.body}
                         </p>
-                        {t.attachment_urls.length > 0 ? (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {t.attachment_urls.map((url) => (
+                        {t.attachment_paths.length > 0 ? (
+                          <div className="mt-3 flex flex-wrap gap-3">
+                            {t.attachment_paths.map((p, i) => (
                               <a
-                                key={url}
-                                href={url}
+                                key={p}
+                                href={t.attachment_urls[i]}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-block rounded-lg border border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
                               >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={url}
-                                  alt="Pièce jointe du ticket"
-                                  className="max-h-36 max-w-[min(100%,14rem)] rounded-lg object-cover"
+                                <DisputeEvidencePreview
+                                  url={t.attachment_urls[i]}
+                                  objectPath={p}
                                 />
                               </a>
                             ))}
@@ -873,68 +828,19 @@ export function MatchArenaClient({
                     onChange={(e) => setFollowUpDraft(e.target.value)}
                     rows={4}
                     maxLength={2000}
-                    placeholder="Minimum 10 caractères — contexte, ce que tu proposes…"
+                    placeholder="Minimum 10 caractères — décris les faits et ce que tu proposes. Tu peux joindre une vidéo du combat ci-dessous."
                     className="mt-2 w-full resize-y rounded-xl border border-white/15 bg-zinc-950/80 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500/30"
                   />
                   <p className="mt-1 font-mono text-[0.55rem] text-zinc-600">
                     {followUpDraft.trim().length}/2000 · min. 10
                   </p>
-                  <p className="mt-4 font-mono text-[0.6rem] uppercase tracking-wider text-zinc-500">
-                    Images (optionnel, max 5 · JPEG, PNG, WebP · 2,5 Mo chacune)
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <label className="cursor-pointer rounded-lg border border-white/15 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-300 hover:border-amber-500/30">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        multiple
-                        className="sr-only"
-                        disabled={pending || evidenceBusy || followUpEvidencePaths.length >= 5}
-                        onChange={(e) => {
-                          void appendEvidenceFiles(
-                            e.target.files,
-                            followUpEvidencePaths.length,
-                            setFollowUpEvidencePaths,
-                          );
-                          e.target.value = "";
-                        }}
-                      />
-                      {evidenceBusy ? "Envoi…" : "Ajouter des images"}
-                    </label>
-                    <span className="font-mono text-[0.55rem] text-zinc-600">
-                      {followUpEvidencePaths.length}/5
-                    </span>
-                  </div>
-                  {followUpEvidencePaths.length > 0 ? (
-                    <ul className="mt-3 flex flex-wrap gap-2">
-                      {followUpEvidencePaths.map((p) => (
-                        <li
-                          key={p}
-                          className="relative rounded-lg border border-white/10"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={disputeEvidencePublicUrl(p)}
-                            alt=""
-                            className="h-20 w-20 rounded-lg object-cover"
-                          />
-                          <button
-                            type="button"
-                            disabled={pending}
-                            onClick={() =>
-                              setFollowUpEvidencePaths((prev) =>
-                                prev.filter((x) => x !== p),
-                              )
-                            }
-                            className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-zinc-600 bg-zinc-900 text-xs text-zinc-300 hover:bg-red-950/80"
-                            aria-label="Retirer cette image"
-                          >
-                            ×
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
+                  <DisputeEvidenceUpload
+                    paths={followUpEvidencePaths}
+                    setPaths={setFollowUpEvidencePaths}
+                    disabled={pending}
+                    busy={evidenceBusy}
+                    onPickFiles={appendEvidenceFiles}
+                  />
                   <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
                     <button
                       type="button"
@@ -999,9 +905,36 @@ export function MatchArenaClient({
                 <span>Réinitialiser la saisie après litige</span>
               </button>
             </div>
-          ) : (
+          ) : null}
+
+          <div
+            className={
+              inDispute
+                ? "mt-6 space-y-6 rounded-xl border border-amber-500/30 bg-zinc-950/40 px-4 py-5 sm:px-6 sm:py-6"
+                : undefined
+            }
+          >
+            {inDispute ? (
+              <div className="border-b border-white/10 pb-5">
+                <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-amber-200/95">
+                  Modifier le résultat
+                </p>
+                <p className="mt-2 max-w-prose text-sm leading-relaxed text-zinc-300 sm:text-[0.95rem]">
+                  Corrige ta déclaration si besoin. Dès que les deux joueurs
+                  indiquent le même score, le litige se ferme et vous pourrez
+                  clôturer le match.
+                </p>
+              </div>
+            ) : null}
+
             <>
-              <div className="mt-6 flex flex-col gap-5 md:flex-row md:items-end md:gap-6">
+              <div
+                className={
+                  inDispute
+                    ? "flex flex-col gap-5 md:flex-row md:items-end md:gap-6"
+                    : "mt-6 flex flex-col gap-5 md:flex-row md:items-end md:gap-6"
+                }
+              >
                 <label className="flex min-w-0 flex-1 flex-col gap-2.5 font-mono text-[0.65rem] font-medium uppercase tracking-[0.2em] text-zinc-500 sm:tracking-[0.22em]">
                   Résultat (ta perspective)
                   <div className="match-arena-select-wrap relative">
@@ -1060,8 +993,22 @@ export function MatchArenaClient({
                 </p>
               ) : null}
 
+              {inDispute && claimsMatch(m) ? (
+                <p className="mt-4 max-w-prose text-sm leading-relaxed text-emerald-200/90 sm:text-[0.95rem]">
+                  Les deux déclarations concordent — le litige devrait se lever
+                  automatiquement. Passe à l&apos;étape 3 pour clôturer le
+                  match.
+                </p>
+              ) : null}
+
               {hasOppClaim ? (
-                <div className="mt-8 rounded-xl border border-white/12 bg-zinc-950/70 px-4 py-5 sm:px-6 sm:py-6">
+                <div
+                  className={
+                    inDispute
+                      ? "rounded-xl border border-white/12 bg-zinc-950/70 px-4 py-5 sm:px-6 sm:py-6"
+                      : "mt-8 rounded-xl border border-white/12 bg-zinc-950/70 px-4 py-5 sm:px-6 sm:py-6"
+                  }
+                >
                   <p className="font-mono text-[0.6rem] uppercase tracking-[0.28em] text-zinc-500 sm:text-[0.65rem]">
                     Déclaration de l&apos;adversaire (lecture seule)
                   </p>
@@ -1071,14 +1018,19 @@ export function MatchArenaClient({
                   <p className="mt-2 font-mono text-[0.7rem] text-zinc-500 sm:text-xs">
                     Perspective globale · joueur A — joueur B
                   </p>
+                  {!inDispute ? (
                   <div className="mt-5 rounded-xl border border-red-500/25 bg-red-950/10 px-4 py-4">
                     <p className="font-mono text-[0.6rem] uppercase tracking-wider text-red-300/90">
                       Désaccord · ticket modération
                     </p>
                     <p className="mt-2 text-sm leading-relaxed text-zinc-400">
                       Si le résultat affiché ne reflète pas la réalité, ouvre un
-                      ticket : les scores déclarés seront joints automatiquement
-                      pour l&apos;équipe (tu peux ajouter des captures).
+                      ticket : les scores déclarés seront joints automatiquement.
+                      Ajoute des captures ou extraits de ton{" "}
+                      <strong className="font-medium text-zinc-200">
+                        enregistrement du combat
+                      </strong>{" "}
+                      si tu l&apos;as — c&apos;est la preuve la plus solide.
                     </p>
                     {!disputeFlowOpen ? (
                       <button
@@ -1119,7 +1071,7 @@ export function MatchArenaClient({
                             onChange={(e) => setDisputeDraft(e.target.value)}
                             rows={5}
                             maxLength={2000}
-                            placeholder="Explique clairement (min. 10 caractères). Pas de HTML — texte brut uniquement."
+                            placeholder="Explique clairement (min. 10 car.). Décris le déroulé ; tu peux joindre une vidéo du combat ci-dessous."
                             className="mt-2 w-full resize-y rounded-xl border border-white/12 bg-zinc-950/90 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-red-500/35 focus:outline-none focus:ring-1 focus:ring-red-500/25"
                           />
                           <p className="mt-1 font-mono text-[0.55rem] text-zinc-600">
@@ -1127,69 +1079,13 @@ export function MatchArenaClient({
                             dangereux filtrés côté serveur
                           </p>
                         </div>
-                        <div>
-                          <p className="font-mono text-[0.6rem] uppercase tracking-wider text-zinc-500">
-                            Captures (optionnel, max 5 · JPEG, PNG, WebP · 2,5 Mo
-                            chacune)
-                          </p>
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <label className="cursor-pointer rounded-lg border border-white/15 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-300 hover:border-red-500/30">
-                              <input
-                                type="file"
-                                accept="image/jpeg,image/png,image/webp"
-                                multiple
-                                className="sr-only"
-                                disabled={
-                                  pending ||
-                                  evidenceBusy ||
-                                  disputeEvidencePaths.length >= 5
-                                }
-                                onChange={(e) => {
-                                  void appendEvidenceFiles(
-                                    e.target.files,
-                                    disputeEvidencePaths.length,
-                                    setDisputeEvidencePaths,
-                                  );
-                                  e.target.value = "";
-                                }}
-                              />
-                              {evidenceBusy ? "Envoi…" : "Ajouter des images"}
-                            </label>
-                            <span className="font-mono text-[0.55rem] text-zinc-600">
-                              {disputeEvidencePaths.length}/5
-                            </span>
-                          </div>
-                          {disputeEvidencePaths.length > 0 ? (
-                            <ul className="mt-3 flex flex-wrap gap-2">
-                              {disputeEvidencePaths.map((p) => (
-                                <li
-                                  key={p}
-                                  className="relative rounded-lg border border-white/10"
-                                >
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img
-                                    src={disputeEvidencePublicUrl(p)}
-                                    alt=""
-                                    className="h-20 w-20 rounded-lg object-cover"
-                                  />
-                                  <button
-                                    type="button"
-                                    disabled={pending}
-                                    onClick={() =>
-                                      setDisputeEvidencePaths((prev) =>
-                                        prev.filter((x) => x !== p),
-                                      )
-                                    }
-                                    className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-zinc-600 bg-zinc-900 text-xs text-zinc-300 hover:bg-red-950/80"
-                                    aria-label="Retirer cette image"
-                                  >
-                                    ×
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : null}
-                        </div>
+                        <DisputeEvidenceUpload
+                          paths={disputeEvidencePaths}
+                          setPaths={setDisputeEvidencePaths}
+                          disabled={pending}
+                          busy={evidenceBusy}
+                          onPickFiles={appendEvidenceFiles}
+                        />
                         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                           <button
                             type="button"
@@ -1222,6 +1118,7 @@ export function MatchArenaClient({
                       </div>
                     )}
                   </div>
+                  ) : null}
                 </div>
               ) : hasMyClaim ? (
                 <div
@@ -1306,7 +1203,7 @@ export function MatchArenaClient({
                 </ul>
               </div>
             </>
-          )}
+          </div>
         </section>
       ) : null}
 
@@ -1352,6 +1249,35 @@ export function MatchArenaClient({
             </div>
           ) : null}
         </section>
+      ) : null}
+
+      {!confirmed ? (
+        <MatchOpponentChatWidget
+          userId={userId}
+          inDispute={inDispute}
+          messages={chatMessages}
+          draft={chatDraft}
+          onDraftChange={setChatDraft}
+          pending={pending}
+          onSend={(text) =>
+            new Promise((resolve) => {
+              setErr(null);
+              startTransition(() => {
+                void (async () => {
+                  const res = await postDisputeChatMessage(matchId, text);
+                  if (res && "error" in res && res.error) {
+                    setErr(res.error);
+                    resolve({ error: res.error });
+                    return;
+                  }
+                  await refreshDisputeThreads();
+                  router.refresh();
+                  resolve(undefined);
+                })();
+              });
+            })
+          }
+        />
       ) : null}
 
       {confirmed ? (

@@ -58,7 +58,12 @@ export default async function DefisPage() {
           DÉFIS OUVERTS
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-500">
-          Chaque ligne est une demande de 1v1 classé. Publie ou accepte un duel.
+          Chaque ligne est une demande de 1v1 classé. Publie ou accepte un duel —
+          pense à{" "}
+          <strong className="font-medium text-zinc-400">
+            enregistrer le combat
+          </strong>{" "}
+          dès qu&apos;elle commence (preuve en cas de litige).
         </p>
       </div>
 

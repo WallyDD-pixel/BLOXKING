@@ -12,6 +12,7 @@ import {
   type OngoingMatchRow,
 } from "@/app/play/actions";
 import { OngoingMatchesBlock } from "@/components/ongoing-matches-block";
+import { PvpRecordingTip } from "@/components/pvp-recording-tip";
 import {
   clearMatchmakingSearch,
   readMatchmakingSearch,
@@ -389,6 +390,9 @@ export function MatchmakingClient({
             </div>
           ) : (
             <>
+              <div className="mx-auto mb-6 max-w-lg text-left">
+                <PvpRecordingTip variant="compact" />
+              </div>
               <button
                 type="button"
                 onClick={() => void handleJoin()}
