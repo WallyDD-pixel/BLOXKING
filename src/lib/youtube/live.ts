@@ -10,7 +10,8 @@ const CACHE_SECONDS = 60;
 
 function apiKey(): string | null {
   const key = process.env.YOUTUBE_API_KEY?.trim();
-  return key || null;
+  if (!key || key === "ta_cle" || key === "ta_cle_api_google") return null;
+  return key;
 }
 
 function channelHandle(): string {
@@ -77,7 +78,7 @@ async function fetchYoutubeLiveUncached(): Promise<YoutubeLiveStream | null> {
 
 const getCachedYoutubeLive = unstable_cache(
   fetchYoutubeLiveUncached,
-  ["youtube-live"],
+  ["youtube-live", "v2-prod"],
   { revalidate: CACHE_SECONDS },
 );
 

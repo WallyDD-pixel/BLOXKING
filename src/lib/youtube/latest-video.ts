@@ -15,7 +15,8 @@ const MIN_REGULAR_VIDEO_SECONDS = 120;
 
 function apiKey(): string | null {
   const key = process.env.YOUTUBE_API_KEY?.trim();
-  return key || null;
+  if (!key || key === "ta_cle" || key === "ta_cle_api_google") return null;
+  return key;
 }
 
 function channelHandle(): string {
@@ -274,7 +275,7 @@ async function fetchLatestVideoUncached(): Promise<YoutubeLatestVideo | null> {
 
 const getCachedLatestVideo = unstable_cache(
   fetchLatestVideoUncached,
-  ["youtube-latest-video", "v2-filter-shorts"],
+  ["youtube-latest-video", "v3-prod"],
   { revalidate: CACHE_SECONDS },
 );
 

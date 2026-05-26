@@ -2,6 +2,26 @@ import type { QueryResultRow } from "pg";
 import { getPool } from "./pool";
 
 function formatDbError(err: unknown): Error {
+  const msg =
+    err && typeof err === "object" && "message" in err
+      ? String((err as { message: string }).message)
+      : String(err);
+  const code =
+    err && typeof err === "object" && "code" in err
+      ? String((err as { code: string }).code)
+      : "";
+
+  if (
+    /ECONNREFUSED|connect ETIMEDOUT|timeout|ENOTFOUND/i.test(msg) ||
+    code === "ECONNREFUSED" ||
+    code === "ETIMEDOUT" ||
+    code === "ENOTFOUND"
+  ) {
+    return new Error(
+      "Impossible de joindre la base de données. Vérifie DATABASE_URL sur le serveur (Vercel : Postgres reachable depuis Internet, mot de passe encodé dans l’URL, DATABASE_SSL).",
+    );
+  }
+
   if (err && typeof err === "object" && "errors" in err) {
     const inner = (err as { errors?: unknown[] }).errors;
     if (Array.isArray(inner) && inner.length > 0) {

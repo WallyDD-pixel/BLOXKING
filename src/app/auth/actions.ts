@@ -42,6 +42,9 @@ const loginSchema = z.object({
 });
 
 function mapAuthError(message: string): string {
+  if (/joindre la base|DATABASE_URL|ECONNREFUSED|connect/i.test(message)) {
+    return "Le serveur ne peut pas accéder à la base de données pour le moment. Réessaie plus tard ou contacte l’administrateur.";
+  }
   return message;
 }
 
@@ -121,10 +124,20 @@ export async function login(
   }
 
   const email = parsed.data.email.toLowerCase();
-  const row = await dbQueryOne<{ id: string; password_hash: string }>(
-    `select id, password_hash from public.users where email = $1`,
-    [email],
-  );
+
+  let row: { id: string; password_hash: string } | null;
+  try {
+    row = await dbQueryOne<{ id: string; password_hash: string }>(
+      `select id, password_hash from public.users where email = $1`,
+      [email],
+    );
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === "object" && "message" in e
+        ? String((e as { message: string }).message)
+        : "Erreur base de données";
+    return { error: mapAuthError(msg), success: null };
+  }
 
   if (!row) return { error: "E-mail ou mot de passe incorrect.", success: null };
   const ok = await verifyPassword(parsed.data.password, row.password_hash);
