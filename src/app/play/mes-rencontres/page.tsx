@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { listMatchHistory, type OngoingMatchRow } from "@/app/play/actions";
 import { getCurrentUser } from "@/lib/auth/session";
+import { TableSearchBar } from "@/components/table-search-bar";
+import { searchBlob } from "@/lib/table-search";
 
 function opponentDisplayName(row: OngoingMatchRow, viewerId: string): string {
   const raw =
@@ -136,7 +138,13 @@ export default async function MesRencontresPage() {
           </div>
         </div>
       ) : (
-        <ul className="space-y-3 sm:space-y-4">
+        <div className="space-y-4">
+          <TableSearchBar
+            targetId="mes-rencontres-list"
+            totalCount={rows.length}
+            placeholder="Rechercher adversaire, score, statut…"
+          />
+          <ul id="mes-rencontres-list" className="space-y-3 sm:space-y-4">
           {rows.map((row) => {
             const opp = opponentDisplayName(row, user.id);
             const meta = statusMeta(row);
@@ -149,7 +157,21 @@ export default async function MesRencontresPage() {
             });
 
             return (
-              <li key={row.id}>
+              <li
+                key={row.id}
+                data-search={searchBlob(
+                  row.id,
+                  opp,
+                  meta.label,
+                  meta.sub,
+                  sourceBadge(row.source),
+                  row.status,
+                  outcome,
+                  score ? `${score.a}-${score.b}` : "",
+                  lpDelta,
+                  when,
+                )}
+              >
                 <Link
                   href={`/play/match/${row.id}`}
                   className="game-panel group flex flex-col gap-4 rounded-2xl px-4 py-4 transition hover:border-amber-500/30 sm:flex-row sm:items-stretch sm:justify-between sm:gap-6 sm:px-6 sm:py-5"
@@ -220,7 +242,8 @@ export default async function MesRencontresPage() {
               </li>
             );
           })}
-        </ul>
+          </ul>
+        </div>
       )}
 
       <div className="flex flex-wrap items-center gap-4 border-t border-white/10 pt-6">

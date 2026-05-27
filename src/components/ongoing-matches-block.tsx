@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { listOngoingMatches, type OngoingMatchRow } from "@/app/play/actions";
+import { TableSearchBar } from "@/components/table-search-bar";
 import { deriveOngoingMatchCardState } from "@/lib/match-list-state";
 import { isPlacementComplete, PLACEMENT_TOTAL } from "@/lib/ranked";
+import { searchBlob } from "@/lib/table-search";
 
 function sourceLabel(source: string): string {
   return source === "queue" ? "Matchmaking" : "Défi";
@@ -82,7 +84,13 @@ export function OngoingMatchesBlock({
           </p>
         </div>
       ) : (
-        <ul className="mt-6 space-y-3">
+        <div className="mt-6 space-y-4">
+          <TableSearchBar
+            targetId="ongoing-matches-list"
+            totalCount={rows.length}
+            placeholder="Rechercher une rencontre en cours…"
+          />
+          <ul id="ongoing-matches-list" className="space-y-3">
           {rows.map((m) => {
             const isA = m.player_a === userId;
             const oppLabel = isA
@@ -96,7 +104,18 @@ export function OngoingMatchesBlock({
             });
 
             return (
-              <li key={m.id}>
+              <li
+                key={m.id}
+                data-search={searchBlob(
+                  m.id,
+                  oppLabel,
+                  card.badge,
+                  card.detail,
+                  sourceLabel(m.source),
+                  m.status,
+                  dateStr,
+                )}
+              >
                 <Link
                   href={`/play/match/${m.id}`}
                   className="game-panel flex flex-col gap-3 rounded-xl p-4 transition hover:border-amber-500/35 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
@@ -129,7 +148,8 @@ export function OngoingMatchesBlock({
               </li>
             );
           })}
-        </ul>
+          </ul>
+        </div>
       )}
 
       <p className="mt-6 text-center">

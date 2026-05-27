@@ -13,6 +13,8 @@ import {
   FINALIST_COUNT,
 } from "@/lib/competition-copy";
 import { PLACEMENT_TOTAL } from "@/lib/ranked";
+import { TableSearchBar } from "@/components/table-search-bar";
+import { searchBlob } from "@/lib/table-search";
 
 export default async function ClassementPage() {
   const user = await getCurrentUser();
@@ -124,7 +126,13 @@ export default async function ClassementPage() {
               </div>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="space-y-4">
+              <TableSearchBar
+                targetId="classement-table"
+                totalCount={list.length}
+                placeholder="Rechercher un joueur…"
+              />
+              <div id="classement-table" className="overflow-x-auto">
               <table className="w-full min-w-[320px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-white/10 font-mono text-[0.6rem] uppercase tracking-wider text-zinc-500">
@@ -143,6 +151,15 @@ export default async function ClassementPage() {
                     return (
                       <tr
                         key={row.user_id}
+                        data-search={searchBlob(
+                          rank,
+                          name,
+                          row.email,
+                          row.roblox_username,
+                          row.display_name,
+                          row.elo,
+                          row.placement_matches_played,
+                        )}
                         className={`border-b border-white/5 font-mono text-zinc-200 ${
                           isFinalistZone
                             ? "bg-amber-500/[0.08] ring-1 ring-inset ring-amber-500/15"
@@ -199,6 +216,7 @@ export default async function ClassementPage() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </ContentCard>

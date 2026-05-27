@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AdminSmtpTest } from "@/components/admin/admin-smtp-test";
 import { getAdminStats } from "@/lib/admin/queries";
 
 function StatCard({
@@ -72,6 +73,8 @@ export default async function AdminDashboardPage() {
           href="/admin/matchs"
         />
       </div>
+
+      <AdminSmtpTest />
 
       <p className="text-sm text-zinc-500">
         Accès réservé aux comptes admin. Configure{" "}

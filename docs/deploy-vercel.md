@@ -33,6 +33,14 @@ Dans le projet Vercel : **Settings** → **Environment Variables**.
 | `NEXT_PUBLIC_ADSENSE_SLOT_BANNER_TOP` | optionnel | ID bannière horizontale sous le header |
 | `NEXT_PUBLIC_ADS_PLACEHOLDERS` | optionnel | `true` = cadres debug uniquement (jamais en prod) |
 | `ADMIN_EMAILS` | optionnel | Emails admin séparés par des virgules (accès `/admin`) |
+| `SMTP_HOST` | si e-mails | ex. `smtp.gmail.com` (pas un nom inventé type « Bloxking ») |
+| `SMTP_PORT` | si e-mails | `587` (Gmail) ou `465` (SSL) |
+| `SMTP_SECURE` | si e-mails | `false` avec le port 587, `true` avec le port 465 |
+| `SMTP_USER` | si e-mails | Adresse Gmail complète |
+| `SMTP_PASS` | si e-mails | **Mot de passe d’application** Google (16 caractères), pas le mot de passe du compte |
+| `SMTP_FROM` | si e-mails | **Même adresse** que `SMTP_USER` pour Gmail |
+
+Après déploiement : **Admin** → panneau → **Vérifier la config** / **Envoyer un e-mail test**.
 
 **Important après la première mise en ligne**
 

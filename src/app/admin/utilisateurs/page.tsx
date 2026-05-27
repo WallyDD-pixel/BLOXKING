@@ -1,11 +1,22 @@
 import Link from "next/link";
+import { TableSearchBar } from "@/components/table-search-bar";
 import { listAdminUsers } from "@/lib/admin/queries";
+import { searchBlob } from "@/lib/table-search";
 
 export default async function AdminUsersPage() {
   const rows = await listAdminUsers(150);
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-white/10">
+    <div className="space-y-4">
+      <TableSearchBar
+        targetId="admin-users-table"
+        totalCount={rows.length}
+        placeholder="Rechercher par pseudo, e-mail, ELO…"
+      />
+      <div
+        id="admin-users-table"
+        className="overflow-x-auto rounded-xl border border-white/10"
+      >
       <table className="w-full min-w-[640px] text-left text-sm">
         <thead className="border-b border-white/10 bg-zinc-900/80 text-zinc-500">
           <tr>
@@ -18,7 +29,21 @@ export default async function AdminUsersPage() {
         </thead>
         <tbody className="divide-y divide-white/5">
           {rows.map((u) => (
-            <tr key={u.id} className="hover:bg-white/[0.02]">
+            <tr
+              key={u.id}
+              className="hover:bg-white/[0.02]"
+              data-search={searchBlob(
+                u.id,
+                u.email,
+                u.roblox_username,
+                u.display_name,
+                u.elo,
+                u.placement_matches_played,
+                u.matches_total,
+                u.matches_wins,
+                u.is_admin ? "admin" : "",
+              )}
+            >
               <td className="px-4 py-3">
                 <p className="font-medium text-zinc-100">
                   {u.roblox_username ?? u.display_name ?? "—"}
@@ -57,6 +82,7 @@ export default async function AdminUsersPage() {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

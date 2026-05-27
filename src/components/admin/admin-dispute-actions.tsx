@@ -13,6 +13,7 @@ type Props = {
   status: string;
   playerALabel: string;
   playerBLabel: string;
+  openCancellationCount?: number;
 };
 
 export function AdminDisputeActions({
@@ -20,6 +21,7 @@ export function AdminDisputeActions({
   status,
   playerALabel,
   playerBLabel,
+  openCancellationCount = 0,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -60,6 +62,12 @@ export function AdminDisputeActions({
   return (
     <div className="rounded-xl border border-white/10 bg-zinc-900/50 p-4">
       <h3 className="font-semibold text-zinc-100">Actions modération</h3>
+      {openCancellationCount > 0 ? (
+        <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+          {openCancellationCount} demande(s) d&apos;annulation en attente — voir
+          ci-dessous pour les raisons.
+        </p>
+      ) : null}
       {closed ? (
         <p className="mt-2 text-sm text-zinc-500">Match déjà clôturé.</p>
       ) : (

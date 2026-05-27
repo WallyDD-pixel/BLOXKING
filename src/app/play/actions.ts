@@ -571,6 +571,69 @@ export async function listDisputeTickets(
   }
 }
 
+export type MatchCancellationRequestRow = {
+  id: string;
+  requested_by: string;
+  reason: string;
+  status: string;
+  created_at: string;
+};
+
+export async function listMatchCancellationRequests(
+  matchId: string,
+): Promise<{ requests: MatchCancellationRequestRow[] }> {
+  const uid = await getUserId();
+  if (!uid) return { requests: [] };
+
+  const row = await dbQueryOne<{ player_a: string; player_b: string }>(
+    `select player_a, player_b from public.matches where id = $1`,
+    [matchId],
+  );
+  if (!row || (row.player_a !== uid && row.player_b !== uid)) return { requests: [] };
+
+  try {
+    const requests = await dbQuery<MatchCancellationRequestRow>(
+      `
+      select id, requested_by, reason, status, created_at
+      from public.match_cancellation_requests
+      where match_id = $1
+      order by created_at desc
+      `,
+      [matchId],
+    );
+    return { requests };
+  } catch {
+    return { requests: [] };
+  }
+}
+
+export async function matchRequestCancellation(matchId: string, reason: string) {
+  const uid = await getUserId();
+  if (!uid) return { error: "Non connecté" };
+
+  const clean = sanitizeDisputeExplanation(reason);
+  if (clean.length < 10) {
+    return { error: mapMatchRpcError("cancellation_reason_too_short") };
+  }
+
+  try {
+    const p = rpcPayload(
+      await callUserRpc(
+        uid,
+        `select match_request_cancellation($1::uuid, $2::text) as result`,
+        [matchId, clean],
+      ),
+    );
+    if (p.error) return { error: mapMatchRpcError(String(p.error)) };
+    revalidateMatchPaths(matchId);
+    revalidatePath("/admin/matchs");
+    revalidatePath(`/admin/litiges/${matchId}`);
+    return { ok: true as const };
+  } catch (e) {
+    return { error: dbError(e) };
+  }
+}
+
 /** @deprecated Préférer uploadDisputeEvidenceClient (route API, fichiers > ~1 Mo). */
 export async function uploadMatchDisputeEvidence(matchId: string, file: File) {
   const uid = await getUserId();

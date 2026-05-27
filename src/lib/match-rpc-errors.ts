@@ -32,6 +32,9 @@ export function mapMatchRpcError(code: string): string {
       "Trop d’appels à la recherche matchmaking. Attends une minute et réessaie.",
     queue_cooldown:
       "Patiente quelques secondes après la fin de ton dernier match avant de relancer la recherche.",
+    cancellation_reason_too_short:
+      "Explique la raison en au moins 10 caractères pour que la modération puisse traiter ta demande.",
+    cancellation_reason_too_long: "Message trop long (max. 2000 caractères).",
   };
   return map[code] ?? code;
 }

@@ -7,6 +7,7 @@ import { expireStaleMatchesIfNeeded } from "@/lib/match/expire-stale-matches";
 import { enrichMatchLabels } from "@/lib/match/enrich-labels";
 import { getRankedSnapshotsForMatchParticipants } from "@/app/play/actions";
 import { MatchArenaClient, type MatchArenaRow } from "./match-arena-client";
+import { listMatchCancellationRequests } from "@/app/play/actions";
 
 export default async function MatchPage({
   params,
@@ -41,6 +42,11 @@ export default async function MatchPage({
 
   const sourceLabel = m.source === "queue" ? "Matchmaking" : "Défi ouvert";
 
+  const { requests: cancellationRequests } =
+    m.status === "pending" || m.status === "disputed"
+      ? await listMatchCancellationRequests(id)
+      : { requests: [] };
+
   return (
     <div className="space-y-8 sm:space-y-10">
       <MatchBackToList />
@@ -72,6 +78,7 @@ export default async function MatchPage({
         initialRankedA={rankedA}
         initialRankedB={rankedB}
         sourceLabel={sourceLabel}
+        initialCancellationRequests={cancellationRequests}
       />
 
       <div className="flex flex-wrap items-center gap-4 border-t border-white/10 pt-6">

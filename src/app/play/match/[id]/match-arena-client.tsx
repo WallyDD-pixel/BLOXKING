@@ -23,11 +23,13 @@ import {
   postDisputeChatMessage,
   type DisputeChatMessageRow,
   type DisputeTicketRow,
+  type MatchCancellationRequestRow,
 } from "@/app/play/actions";
 import { isPlacementComplete, type RankedStatsPublic } from "@/lib/ranked";
 import { DisputeEvidencePreview } from "@/components/match/dispute-evidence-preview";
 import { DisputeEvidenceUpload } from "@/components/match/dispute-evidence-upload";
 import { MatchOpponentChatWidget } from "@/components/match/match-opponent-chat-widget";
+import { MatchCancellationRequest } from "@/components/match/match-cancellation-request";
 import { PvpRecordingTip } from "@/components/pvp-recording-tip";
 import {
   countVideosInPaths,
@@ -37,9 +39,13 @@ import {
 import { uploadDisputeEvidenceClient } from "@/lib/upload-dispute-evidence-client";
 import { PVP_RECORDING_DISPUTE_HINT } from "@/lib/pvp-recording-copy";
 import {
+  MATCH_START_DEADLINE_MS,
   formatCountdownMs,
+  matchAbandonDeadlineMs,
   matchStartDeadlineMs,
 } from "@/lib/match/match-start-deadline";
+
+const START_DEADLINE_MINUTES = MATCH_START_DEADLINE_MS / 60_000;
 
 export type MatchArenaRow = {
   id: string;
@@ -169,6 +175,7 @@ export function MatchArenaClient({
   initialRankedA,
   initialRankedB,
   sourceLabel,
+  initialCancellationRequests = [],
 }: {
   matchId: string;
   userId: string;
@@ -176,6 +183,7 @@ export function MatchArenaClient({
   initialRankedA: RankedStatsPublic | null;
   initialRankedB: RankedStatsPublic | null;
   sourceLabel: string;
+  initialCancellationRequests?: MatchCancellationRequestRow[];
 }) {
   const router = useRouter();
   const [m, setM] = useState<MatchArenaRow>(initialMatch);
@@ -209,10 +217,15 @@ export function MatchArenaClient({
   const myStarted = isA ? !!m.match_started_a : !!m.match_started_b;
   const oppStarted = isA ? !!m.match_started_b : !!m.match_started_a;
   const bothStarted = !!m.match_started_a && !!m.match_started_b;
+  const inDispute = !!(m.dispute || m.status === "disputed");
   const startDeadlineMs = matchStartDeadlineMs(m.created_at);
   const startCountdownMs = Math.max(0, startDeadlineMs - nowMs);
   const startDeadlinePassed =
     m.status === "pending" && !bothStarted && startCountdownMs <= 0;
+  const abandonDeadlineMs = matchAbandonDeadlineMs(m.created_at);
+  const abandonCountdownMs = Math.max(0, abandonDeadlineMs - nowMs);
+  const showAbandonWarning =
+    m.status === "pending" && !inDispute && abandonCountdownMs > 0;
 
   const myClaimA = isA ? m.claim_from_a_maps_a : m.claim_from_b_maps_a;
   const myClaimB = isA ? m.claim_from_a_maps_b : m.claim_from_b_maps_b;
@@ -222,13 +235,11 @@ export function MatchArenaClient({
   const oppClaimB = isA ? m.claim_from_b_maps_b : m.claim_from_a_maps_b;
   const hasOppClaim = oppClaimA != null && oppClaimB != null;
 
-  const inDispute = !!(m.dispute || m.status === "disputed");
-
   useEffect(() => {
-    if (bothStarted || m.status !== "pending" || inDispute) return;
+    if (m.status !== "pending" || inDispute) return;
     const t = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [bothStarted, m.status, inDispute]);
+  }, [m.status, inDispute]);
 
   /** Accord des deux déclarations : verrouillé sauf en litige (où on peut corriger). */
   const scoreLocked = claimsMatch(m) && !inDispute;
@@ -402,6 +413,10 @@ export function MatchArenaClient({
         !m.match_started_a &&
         !m.match_started_b &&
         !m.dispute);
+    const abandoned = m.cancel_reason === "abandoned";
+    const disputeTimeout = m.cancel_reason === "dispute_timeout";
+    const playerRequest = m.cancel_reason === "player_request";
+    const adminCancel = m.cancel_reason === "admin";
 
     return (
       <div className="match-arena-root space-y-8 sm:space-y-10">
@@ -417,7 +432,9 @@ export function MatchArenaClient({
               <p className="mt-4 max-w-prose text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
                 Les deux joueurs n&apos;ont pas confirmé le début du combat dans
                 les{" "}
-                <strong className="font-medium text-zinc-200">5 minutes</strong>{" "}
+                <strong className="font-medium text-zinc-200">
+                  {START_DEADLINE_MINUTES} minutes
+                </strong>{" "}
                 après la création du match. Le match a été annulé automatiquement
                 — aucun ELO n&apos;a changé.
               </p>
@@ -425,11 +442,23 @@ export function MatchArenaClient({
                 Tu peux relancer une recherche ou accepter un autre défi.
               </p>
             </>
-          ) : (
+          ) : abandoned ? (
             <>
               <p className="mt-4 max-w-prose text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
-                Ce match a été annulé automatiquement : un litige avec ticket
-                modération est resté sans résolution pendant plus de{" "}
+                Ce match est resté en cours plus de{" "}
+                <strong className="font-medium text-zinc-200">25 minutes</strong>{" "}
+                sans être clôturé et sans litige déclaré. Il a été annulé comme
+                match abandonné — aucun ELO n&apos;a changé.
+              </p>
+              <p className="mt-3 text-sm text-zinc-500">
+                Tu peux relancer une recherche ou un défi.
+              </p>
+            </>
+          ) : disputeTimeout ? (
+            <>
+              <p className="mt-4 max-w-prose text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
+                Un litige avec ticket modération est resté sans résolution pendant
+                plus de{" "}
                 <strong className="font-medium text-zinc-200">30 minutes</strong>{" "}
                 après l&apos;ouverture du ticket. Aucun résultat ranked ni changement
                 d&apos;ELO n&apos;est enregistré.
@@ -437,6 +466,28 @@ export function MatchArenaClient({
               <p className="mt-3 text-sm text-zinc-500">
                 Tu peux relancer une recherche ou un défi : ce match ne bloque plus
                 ta file.
+              </p>
+            </>
+          ) : playerRequest || adminCancel ? (
+            <>
+              <p className="mt-4 max-w-prose text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
+                {playerRequest
+                  ? "Un modérateur a annulé ce match suite à une demande d'annulation."
+                  : "Un modérateur a annulé ce match."}{" "}
+                Aucun résultat ranked ni changement d&apos;ELO n&apos;est enregistré.
+              </p>
+              <p className="mt-3 text-sm text-zinc-500">
+                Tu peux relancer une recherche ou un défi.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-4 max-w-prose text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
+                Ce match a été annulé. Aucun résultat ranked ni changement
+                d&apos;ELO n&apos;est enregistré.
+              </p>
+              <p className="mt-3 text-sm text-zinc-500">
+                Tu peux relancer une recherche ou un défi.
               </p>
             </>
           )}
@@ -459,6 +510,19 @@ export function MatchArenaClient({
           role="alert"
         >
           {err}
+        </p>
+      ) : null}
+
+      {showAbandonWarning ? (
+        <p
+          className="rounded-xl border border-zinc-600/50 bg-zinc-900/60 px-4 py-3 text-sm text-zinc-400"
+          role="status"
+        >
+          Sans litige ni clôture, ce match sera annulé comme abandonné dans{" "}
+          <strong className="font-medium text-amber-200/95">
+            {formatCountdownMs(abandonCountdownMs)}
+          </strong>{" "}
+          (limite 25 min depuis la création).
         </p>
       ) : null}
 
@@ -1302,6 +1366,15 @@ export function MatchArenaClient({
             </div>
           ) : null}
         </section>
+      ) : null}
+
+      {!confirmed &&
+      (m.status === "pending" || m.status === "disputed") ? (
+        <MatchCancellationRequest
+          matchId={matchId}
+          userId={userId}
+          initialRequests={initialCancellationRequests}
+        />
       ) : null}
 
       {!confirmed ? (

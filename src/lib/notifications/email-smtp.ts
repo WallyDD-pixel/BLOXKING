@@ -1,4 +1,6 @@
 import nodemailer from "nodemailer";
+import type SMTPTransport from "nodemailer/lib/smtp-transport";
+import { getSmtpConfig, getSmtpConfigIssues } from "@/lib/notifications/smtp-config";
 
 export type SmtpSendEmailInput = {
   from: string;
@@ -8,48 +10,77 @@ export type SmtpSendEmailInput = {
   html?: string;
 };
 
-function env(key: string): string | undefined {
-  return process.env[key]?.trim() || undefined;
-}
+function createTransport() {
+  const cfg = getSmtpConfig();
+  if (!cfg) return null;
 
-function getTransport() {
-  const host = env("SMTP_HOST");
-  const portRaw = env("SMTP_PORT");
-  const user = env("SMTP_USER");
-  const pass = env("SMTP_PASS");
+  const options: SMTPTransport.Options = {
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    auth:
+      cfg.user && cfg.pass
+        ? {
+            user: cfg.user,
+            pass: cfg.pass,
+          }
+        : undefined,
+  };
 
-  if (!host || !portRaw) {
-    return null;
+  if (cfg.requireTls) {
+    options.requireTLS = true;
   }
 
-  const port = Number(portRaw);
-  const secure =
-    env("SMTP_SECURE")?.toLowerCase() === "true" || port === 465;
-
-  // Si tu utilises un serveur sans auth (rare), user/pass peuvent être vides.
-  const auth =
-    user && pass
-      ? {
-          user,
-          pass,
-        }
-      : undefined;
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth,
-  });
+  return nodemailer.createTransport(options);
 }
 
-/** Envoi "best-effort" via SMTP (ne lève pas si mal configuré). */
+export function getSmtpDiagnostics(): {
+  configured: boolean;
+  issues: string[];
+} {
+  const issues = getSmtpConfigIssues();
+  return {
+    configured: issues.length === 0,
+    issues,
+  };
+}
+
+/** Vérifie la connexion SMTP (login). */
+export async function verifySmtpConnection(): Promise<
+  { ok: true } | { ok: false; error: string }
+> {
+  const issues = getSmtpConfigIssues();
+  if (issues.length > 0) {
+    return { ok: false, error: issues.join(" ") };
+  }
+
+  const transport = createTransport();
+  if (!transport) {
+    return { ok: false, error: "Transport SMTP non créé." };
+  }
+
+  try {
+    await transport.verify();
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg };
+  } finally {
+    transport.close();
+  }
+}
+
 export async function sendEmailSmtp(
   input: SmtpSendEmailInput,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const transport = getTransport();
+  const issues = getSmtpConfigIssues();
+  if (issues.length > 0) {
+    return { ok: false, error: issues.join(" ") };
+  }
+
+  const transport = createTransport();
   if (!transport) {
-    return { ok: false, error: "SMTP_HOST/SMTP_PORT manquants" };
+    return { ok: false, error: "Transport SMTP non créé." };
   }
 
   const from = input.from.trim();
@@ -57,17 +88,24 @@ export async function sendEmailSmtp(
   if (!from || !to) return { ok: false, error: "From/To invalides" };
 
   try {
-    await transport.sendMail({
+    const info = await transport.sendMail({
       from,
       to,
       subject: input.subject,
       text: input.text,
       html: input.html,
     });
+    if (info.rejected?.length) {
+      return {
+        ok: false,
+        error: `Destinataire refusé : ${info.rejected.join(", ")}`,
+      };
+    }
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: msg };
+  } finally {
+    transport.close();
   }
 }
-

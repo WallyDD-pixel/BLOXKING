@@ -4,8 +4,10 @@ import {
   cancelChallengeForm,
   createChallengeForm,
 } from "@/app/play/actions";
+import { TableSearchBar } from "@/components/table-search-bar";
 import { getCurrentUser } from "@/lib/auth/session";
 import { dbQuery, dbQueryOne } from "@/lib/db/query";
+import { searchBlob } from "@/lib/table-search";
 
 type Challenge = {
   id: string;
@@ -84,7 +86,16 @@ export default async function DefisPage() {
         </button>
       </form>
 
-      <ul className="space-y-3">
+      {challenges.length > 0 ? (
+        <TableSearchBar
+          targetId="defis-list"
+          totalCount={challenges.length}
+          placeholder="Rechercher un défi ou un joueur…"
+          className="mb-4"
+        />
+      ) : null}
+
+      <ul id="defis-list" className="space-y-3">
         {challenges.length === 0 ? (
           <li className="rounded-xl border border-dashed border-zinc-600 bg-zinc-950/40 px-6 py-12 text-center">
             <p className="font-mono text-sm text-zinc-500">
@@ -95,7 +106,17 @@ export default async function DefisPage() {
           challenges.map((c) => {
             const isMine = c.creator_id === myId;
             return (
-              <li key={c.id} className="game-panel rounded-xl px-4 py-4 sm:px-6">
+              <li
+                key={c.id}
+                className="game-panel rounded-xl px-4 py-4 sm:px-6"
+                data-search={searchBlob(
+                  c.id,
+                  c.creator_display_name,
+                  c.creator_id,
+                  c.status,
+                  c.created_at,
+                )}
+              >
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-4">
                     <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-amber-500/25 bg-amber-950/30 font-mono text-xs text-amber-300/85">

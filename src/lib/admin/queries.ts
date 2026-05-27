@@ -43,6 +43,9 @@ export type AdminMatchRow = {
   source: string;
   created_at: string;
   dispute: boolean;
+  cancel_reason: string | null;
+  match_started_a: boolean;
+  match_started_b: boolean;
   player_a: string;
   player_b: string;
   player_a_email: string;
@@ -54,7 +57,24 @@ export type AdminMatchRow = {
   claim_from_b_maps_a: number | null;
   claim_from_b_maps_b: number | null;
   ticket_count: number;
+  cancel_request_count: number;
 };
+
+const ADMIN_MATCH_SELECT = `
+  m.id, m.status, m.source, m.created_at,
+  coalesce(m.dispute, false) as dispute,
+  m.cancel_reason,
+  coalesce(m.match_started_a, false) as match_started_a,
+  coalesce(m.match_started_b, false) as match_started_b,
+  m.player_a, m.player_b,
+  ua.email as player_a_email,
+  ub.email as player_b_email,
+  m.player_a_label, m.player_b_label,
+  m.claim_from_a_maps_a, m.claim_from_a_maps_b,
+  m.claim_from_b_maps_a, m.claim_from_b_maps_b,
+  coalesce(t.cnt, 0)::int as ticket_count,
+  coalesce(cr.cnt, 0)::int as cancel_request_count
+`;
 
 export async function listAdminMatches(options: {
   status?: string;
@@ -66,15 +86,7 @@ export async function listAdminMatches(options: {
   if (status && status !== "all") {
     return dbQuery<AdminMatchRow>(
       `
-      select
-        m.id, m.status, m.source, m.created_at, coalesce(m.dispute, false) as dispute,
-        m.player_a, m.player_b,
-        ua.email as player_a_email,
-        ub.email as player_b_email,
-        m.player_a_label, m.player_b_label,
-        m.claim_from_a_maps_a, m.claim_from_a_maps_b,
-        m.claim_from_b_maps_a, m.claim_from_b_maps_b,
-        coalesce(t.cnt, 0)::int as ticket_count
+      select ${ADMIN_MATCH_SELECT}
       from public.matches m
       join public.users ua on ua.id = m.player_a
       join public.users ub on ub.id = m.player_b
@@ -83,6 +95,12 @@ export async function listAdminMatches(options: {
         from public.match_dispute_tickets
         group by match_id
       ) t on t.match_id = m.id
+      left join (
+        select match_id, count(*)::int as cnt
+        from public.match_cancellation_requests
+        where status = 'open'
+        group by match_id
+      ) cr on cr.match_id = m.id
       where m.status = $1
       order by m.created_at desc
       limit $2
@@ -93,15 +111,7 @@ export async function listAdminMatches(options: {
 
   return dbQuery<AdminMatchRow>(
     `
-    select
-      m.id, m.status, m.source, m.created_at, coalesce(m.dispute, false) as dispute,
-      m.player_a, m.player_b,
-      ua.email as player_a_email,
-      ub.email as player_b_email,
-      m.player_a_label, m.player_b_label,
-      m.claim_from_a_maps_a, m.claim_from_a_maps_b,
-      m.claim_from_b_maps_a, m.claim_from_b_maps_b,
-      coalesce(t.cnt, 0)::int as ticket_count
+    select ${ADMIN_MATCH_SELECT}
     from public.matches m
     join public.users ua on ua.id = m.player_a
     join public.users ub on ub.id = m.player_b
@@ -110,6 +120,12 @@ export async function listAdminMatches(options: {
       from public.match_dispute_tickets
       group by match_id
     ) t on t.match_id = m.id
+    left join (
+      select match_id, count(*)::int as cnt
+      from public.match_cancellation_requests
+      where status = 'open'
+      group by match_id
+    ) cr on cr.match_id = m.id
     order by m.created_at desc
     limit $1
     `,
@@ -222,18 +238,9 @@ export async function getAdminMatchDetail(
   return dbQueryOne<AdminMatchDetail>(
     `
     select
-      m.id, m.status, m.source, m.created_at, coalesce(m.dispute, false) as dispute,
+      ${ADMIN_MATCH_SELECT.trim()},
       coalesce(m.manual_dispute, false) as manual_dispute,
-      coalesce(m.match_started_a, false) as match_started_a,
-      coalesce(m.match_started_b, false) as match_started_b,
-      m.player_a, m.player_b,
-      ua.email as player_a_email,
-      ub.email as player_b_email,
-      m.player_a_label, m.player_b_label,
-      m.claim_from_a_maps_a, m.claim_from_a_maps_b,
-      m.claim_from_b_maps_a, m.claim_from_b_maps_b,
-      m.elo_delta_a, m.elo_delta_b,
-      coalesce(t.cnt, 0)::int as ticket_count
+      m.elo_delta_a, m.elo_delta_b
     from public.matches m
     join public.users ua on ua.id = m.player_a
     join public.users ub on ub.id = m.player_b
@@ -242,6 +249,12 @@ export async function getAdminMatchDetail(
       from public.match_dispute_tickets
       group by match_id
     ) t on t.match_id = m.id
+    left join (
+      select match_id, count(*)::int as cnt
+      from public.match_cancellation_requests
+      where status = 'open'
+      group by match_id
+    ) cr on cr.match_id = m.id
     where m.id = $1
     `,
     [matchId],
@@ -308,6 +321,38 @@ export async function listAdminChat(matchId: string): Promise<AdminChatRow[]> {
     join public.users u on u.id = c.author_id
     where c.match_id = $1
     order by c.created_at asc
+    `,
+    [matchId],
+  );
+}
+
+export type AdminCancellationRequestRow = {
+  id: string;
+  requested_by: string;
+  requester_email: string;
+  requester_label: string | null;
+  reason: string;
+  status: string;
+  created_at: string;
+};
+
+export async function listAdminCancellationRequests(
+  matchId: string,
+): Promise<AdminCancellationRequestRow[]> {
+  return dbQuery<AdminCancellationRequestRow>(
+    `
+    select
+      r.id,
+      r.requested_by,
+      u.email as requester_email,
+      coalesce(u.display_name, u.roblox_username) as requester_label,
+      r.reason,
+      r.status,
+      r.created_at
+    from public.match_cancellation_requests r
+    join public.users u on u.id = r.requested_by
+    where r.match_id = $1
+    order by r.created_at desc
     `,
     [matchId],
   );

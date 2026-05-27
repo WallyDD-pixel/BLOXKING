@@ -20,7 +20,7 @@ begin
   where m.status = 'pending'
     and coalesce(m.dispute, false) = false
     and not (m.match_started_a and m.match_started_b)
-    and m.created_at < now() - interval '5 minutes';
+    and m.created_at < now() - interval '2 minutes';
 
   if cardinality(due_ids) = 0 then
     return jsonb_build_object('cancelled', 0);
