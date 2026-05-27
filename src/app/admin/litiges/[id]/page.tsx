@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { expireStaleMatchesIfNeeded } from "@/lib/match/expire-stale-matches";
 import { AdminDisputeActions } from "@/components/admin/admin-dispute-actions";
+import { AdminDisputeModeration } from "@/components/admin/admin-dispute-moderation";
 import {
   getAdminMatchDetail,
   listAdminChat,
@@ -24,6 +25,7 @@ import {
   AdminMatchPlayerChat,
 } from "@/components/admin/admin-match-chat-transcript";
 import { formatDateTimeFr } from "@/lib/format-datetime";
+import { getPlayerModerationStatus } from "@/lib/moderation/player-status";
 
 export default async function AdminDisputeDetailPage({
   params,
@@ -35,10 +37,12 @@ export default async function AdminDisputeDetailPage({
   const match = await getAdminMatchDetail(id);
   if (!match) notFound();
 
-  const [tickets, chat, cancellationRequests] = await Promise.all([
+  const [tickets, chat, cancellationRequests, modA, modB] = await Promise.all([
     listAdminTickets(id),
     listAdminChat(id),
     listAdminCancellationRequests(id),
+    getPlayerModerationStatus(match.player_a),
+    getPlayerModerationStatus(match.player_b),
   ]);
 
   const openCancellationRequests = cancellationRequests.filter(
@@ -134,6 +138,14 @@ export default async function AdminDisputeDetailPage({
         playerBLabel={playerBName}
         openCancellationCount={openCancellationRequests.length}
       />
+
+      {modA && modB ? (
+        <AdminDisputeModeration
+          matchId={match.id}
+          playerA={modA}
+          playerB={modB}
+        />
+      ) : null}
 
       {openCancellationRequests.length > 0 ? (
         <section className="rounded-xl border border-amber-500/35 bg-amber-500/[0.06] p-5">

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BlameStatusBanner } from "@/components/blame-status-banner";
 import { PlacementProgress } from "@/components/placement-progress";
 import { YoutubeLiveBadge } from "@/components/youtube-live-badge";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -18,16 +19,35 @@ export default async function PlayHomePage() {
   const rankedRow = await dbQueryOne<{
     elo: number;
     placement_matches_played: number;
+    blame_active: boolean;
+    blame_fair_wins_done: number;
+    blame_fair_wins_required: number;
   }>(
-    `select elo, placement_matches_played from public.player_ranked_stats where user_id = $1`,
+    `
+    select
+      elo,
+      placement_matches_played,
+      coalesce(blame_active, false) as blame_active,
+      coalesce(blame_fair_wins_done, 0) as blame_fair_wins_done,
+      coalesce(blame_fair_wins_required, 0) as blame_fair_wins_required
+    from public.player_ranked_stats
+    where user_id = $1
+    `,
     [user.id],
   );
 
   const placementMatchesPlayed = rankedRow?.placement_matches_played ?? 0;
   const elo = rankedRow?.elo ?? DEFAULT_ELO;
+  const blameActive = rankedRow?.blame_active ?? false;
 
   return (
     <div className="space-y-10">
+      {blameActive ? (
+        <BlameStatusBanner
+          fairWinsDone={rankedRow?.blame_fair_wins_done ?? 0}
+          fairWinsRequired={rankedRow?.blame_fair_wins_required ?? 0}
+        />
+      ) : null}
       <div className="game-panel relative overflow-hidden rounded-xl p-6 sm:p-8">
         <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-amber-500/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-12 -left-8 h-40 w-40 rounded-full bg-amber-500/8 blur-3xl" />

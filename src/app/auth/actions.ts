@@ -125,10 +125,18 @@ export async function login(
 
   const email = parsed.data.email.toLowerCase();
 
-  let row: { id: string; password_hash: string } | null;
+  let row: {
+    id: string;
+    password_hash: string;
+    banned_at: string | null;
+  } | null;
   try {
-    row = await dbQueryOne<{ id: string; password_hash: string }>(
-      `select id, password_hash from public.users where email = $1`,
+    row = await dbQueryOne<{
+      id: string;
+      password_hash: string;
+      banned_at: string | null;
+    }>(
+      `select id, password_hash, banned_at from public.users where email = $1`,
       [email],
     );
   } catch (e: unknown) {
@@ -142,6 +150,13 @@ export async function login(
   if (!row) return { error: "E-mail ou mot de passe incorrect.", success: null };
   const ok = await verifyPassword(parsed.data.password, row.password_hash);
   if (!ok) return { error: "E-mail ou mot de passe incorrect.", success: null };
+  if (row.banned_at) {
+    return {
+      error:
+        "Ce compte est suspendu. Contacte la modération si tu penses qu’il s’agit d’une erreur.",
+      success: null,
+    };
+  }
 
   await createSession(row.id);
 

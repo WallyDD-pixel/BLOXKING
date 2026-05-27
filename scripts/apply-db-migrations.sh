@@ -23,6 +23,8 @@ MIGRATIONS=(
   "12_grants_user_notifications.sql"
   "13_matchmaking_unified_pool.sql"
   "14_matchmaking_avoid_rematch.sql"
+  "15_player_blame_moderation.sql"
+  "16_elo_blame_penalty.sql"
 )
 
 echo "Repo: $REPO_ROOT"

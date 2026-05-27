@@ -1,0 +1,2 @@
+export const BLAME_FAIR_WINS_REQUIRED = 2;
+export const BLAME_LOSS_ELO_MULTIPLIER = 2.5;

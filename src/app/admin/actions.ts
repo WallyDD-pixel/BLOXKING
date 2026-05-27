@@ -115,6 +115,97 @@ export async function adminResetDispute(
   }
 }
 
+export async function adminApplyBlame(
+  userId: string,
+  matchId: string,
+  note?: string,
+): Promise<{ ok?: true; error?: string }> {
+  const admin = await requireAdmin();
+  try {
+    const p = rpcPayload(
+      await callAdminRpc(
+        admin.id,
+        `select admin_apply_player_blame($1::uuid, $2::uuid, $3::text) as result`,
+        [userId, matchId, note ?? null],
+      ),
+    );
+    if (p.error) {
+      const code = String(p.error);
+      if (code === "user_banned") return { error: "Joueur déjà banni." };
+      if (code === "user_not_found") return { error: "Joueur introuvable." };
+      return { error: "Impossible d’appliquer le blame." };
+    }
+    revalidateAdmin(matchId);
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erreur" };
+  }
+}
+
+export async function adminClearBlame(
+  userId: string,
+): Promise<{ ok?: true; error?: string }> {
+  const admin = await requireAdmin();
+  try {
+    const p = rpcPayload(
+      await callAdminRpc(
+        admin.id,
+        `select admin_clear_player_blame($1::uuid) as result`,
+        [userId],
+      ),
+    );
+    if (p.error) return { error: "Impossible de retirer le blame." };
+    revalidateAdmin();
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erreur" };
+  }
+}
+
+export async function adminBanUser(
+  userId: string,
+  reason?: string,
+): Promise<{ ok?: true; error?: string }> {
+  const admin = await requireAdmin();
+  try {
+    const p = rpcPayload(
+      await callAdminRpc(
+        admin.id,
+        `select admin_ban_user($1::uuid, $2::text) as result`,
+        [userId, reason ?? null],
+      ),
+    );
+    if (p.error) {
+      if (String(p.error) === "user_not_found") return { error: "Joueur introuvable." };
+      return { error: "Impossible de bannir." };
+    }
+    revalidateAdmin();
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erreur" };
+  }
+}
+
+export async function adminUnbanUser(
+  userId: string,
+): Promise<{ ok?: true; error?: string }> {
+  const admin = await requireAdmin();
+  try {
+    const p = rpcPayload(
+      await callAdminRpc(
+        admin.id,
+        `select admin_unban_user($1::uuid) as result`,
+        [userId],
+      ),
+    );
+    if (p.error) return { error: "Impossible de lever le ban." };
+    revalidateAdmin();
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erreur" };
+  }
+}
+
 export async function adminPostDisputeChatMessage(
   matchId: string,
   body: string,

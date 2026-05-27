@@ -34,6 +34,17 @@ export async function joinRankedQueue(uid: string): Promise<JoinQueueResult> {
   await sleepRandomJitterMs();
   await expireStaleMatchesIfNeeded();
 
+  const banned = await dbQueryOne<{ banned_at: string | null }>(
+    `select banned_at from public.users where id = $1`,
+    [uid],
+  );
+  if (banned?.banned_at) {
+    return {
+      error:
+        "Compte suspendu. Contacte la modération si tu penses qu’il s’agit d’une erreur.",
+    };
+  }
+
   const coolRow = await dbQueryOne<{ queue_available_after: string | null }>(
     `select queue_available_after from public.player_ranked_stats where user_id = $1`,
     [uid],
