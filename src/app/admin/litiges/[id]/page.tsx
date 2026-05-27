@@ -12,6 +12,7 @@ import {
   matchStatusLabel,
 } from "@/lib/admin/display";
 import { disputeEvidencePublicUrl } from "@/lib/storage/dispute-evidence-url";
+import { DisputeEvidencePreview } from "@/components/match/dispute-evidence-preview";
 
 export default async function AdminDisputeDetailPage({
   params,
@@ -26,6 +27,9 @@ export default async function AdminDisputeDetailPage({
     listAdminTickets(id),
     listAdminChat(id),
   ]);
+
+  const playerAName = match.player_a_label ?? match.player_a_email;
+  const playerBName = match.player_b_label ?? match.player_b_email;
 
   return (
     <div className="space-y-6">
@@ -91,7 +95,12 @@ export default async function AdminDisputeDetailPage({
         </p>
       </div>
 
-      <AdminDisputeActions matchId={match.id} status={match.status} />
+      <AdminDisputeActions
+        matchId={match.id}
+        status={match.status}
+        playerALabel={playerAName}
+        playerBLabel={playerBName}
+      />
 
       <section>
         <h2 className="text-lg font-semibold text-zinc-100">Tickets litige</h2>
@@ -112,20 +121,23 @@ export default async function AdminDisputeDetailPage({
                   {t.body}
                 </p>
                 {t.attachment_paths.length > 0 ? (
-                  <ul className="mt-3 flex flex-wrap gap-2">
-                    {t.attachment_paths.map((p) => (
-                      <li key={p}>
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    {t.attachment_paths.map((p) => {
+                      const url = disputeEvidencePublicUrl(p);
+                      return (
                         <a
-                          href={disputeEvidencePublicUrl(p)}
+                          key={p}
+                          href={url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm text-amber-400 underline hover:text-amber-300"
+                          className="block"
+                          aria-label="Ouvrir la preuve"
                         >
-                          Preuve
+                          <DisputeEvidencePreview url={url} objectPath={p} />
                         </a>
-                      </li>
-                    ))}
-                  </ul>
+                      );
+                    })}
+                  </div>
                 ) : null}
               </li>
             ))}

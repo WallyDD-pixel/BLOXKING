@@ -49,6 +49,8 @@ begin
     claim_from_a_maps_b = p_maps_b,
     claim_from_b_maps_a = p_maps_a,
     claim_from_b_maps_b = p_maps_b,
+    match_started_a = true,
+    match_started_b = true,
     b_accepts_a_claim = true,
     a_accepts_b_claim = true,
     dispute = false,

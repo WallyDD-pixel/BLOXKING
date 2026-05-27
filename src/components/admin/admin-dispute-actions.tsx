@@ -11,9 +11,16 @@ import {
 type Props = {
   matchId: string;
   status: string;
+  playerALabel: string;
+  playerBLabel: string;
 };
 
-export function AdminDisputeActions({ matchId, status }: Props) {
+export function AdminDisputeActions({
+  matchId,
+  status,
+  playerALabel,
+  playerBLabel,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [mapsA, setMapsA] = useState("2");
@@ -21,6 +28,22 @@ export function AdminDisputeActions({ matchId, status }: Props) {
   const [message, setMessage] = useState<string | null>(null);
 
   const closed = status === "confirmed" || status === "cancelled";
+  const a = Number(mapsA);
+  const b = Number(mapsB);
+  const bo3Valid =
+    Number.isFinite(a) &&
+    Number.isFinite(b) &&
+    Number.isInteger(a) &&
+    Number.isInteger(b) &&
+    a >= 0 &&
+    b >= 0 &&
+    a <= 2 &&
+    b <= 2 &&
+    Math.max(a, b) === 2 &&
+    a + b <= 3;
+
+  const winner =
+    bo3Valid && a !== b ? (a > b ? playerALabel : playerBLabel) : null;
 
   function run(action: () => Promise<{ ok?: true; error?: string }>) {
     setMessage(null);
@@ -46,6 +69,7 @@ export function AdminDisputeActions({ matchId, status }: Props) {
               Score BO3 (joueur A)
               <input
                 type="number"
+                step={1}
                 min={0}
                 max={2}
                 value={mapsA}
@@ -57,6 +81,7 @@ export function AdminDisputeActions({ matchId, status }: Props) {
               Score (joueur B)
               <input
                 type="number"
+                step={1}
                 min={0}
                 max={2}
                 value={mapsB}
@@ -66,7 +91,7 @@ export function AdminDisputeActions({ matchId, status }: Props) {
             </label>
             <button
               type="button"
-              disabled={pending}
+              disabled={pending || !bo3Valid}
               onClick={() =>
                 run(() =>
                   adminResolveMatch(
@@ -80,6 +105,18 @@ export function AdminDisputeActions({ matchId, status }: Props) {
             >
               Valider le score
             </button>
+          </div>
+          <div className="mt-3 text-sm">
+            <span className="text-zinc-500">Prévision :</span>{" "}
+            {bo3Valid && winner ? (
+              <span className="font-semibold text-emerald-200">
+                {winner} gagne ({a}-{b})
+              </span>
+            ) : (
+              <span className="text-zinc-500">
+                BO3 invalide (doit être 2-0, 2-1, 0-2 ou 1-2).
+              </span>
+            )}
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
