@@ -46,6 +46,13 @@ function isGmailHost(host: string): boolean {
   return h.includes("gmail") || h.includes("googlemail");
 }
 
+/** Google affiche les mots de passe d’app par groupes de 4 — SMTP exige 16 caractères sans espaces. */
+function normalizeSmtpPass(pass: string, host: string): string {
+  if (!pass) return pass;
+  if (isGmailHost(host)) return pass.replace(/\s+/g, "");
+  return pass;
+}
+
 /**
  * Adresse expéditeur réellement utilisée.
  * Gmail impose que From = compte authentifié (SMTP_USER).
@@ -68,7 +75,7 @@ export function getSmtpConfigDiagnostics(): SmtpConfigDiagnostics {
   const host = env("SMTP_HOST");
   const portRaw = env("SMTP_PORT");
   const user = env("SMTP_USER");
-  const pass = env("SMTP_PASS");
+  const pass = normalizeSmtpPass(env("SMTP_PASS"), host);
   const smtpFrom = env("SMTP_FROM");
   const disputeFrom = env("DISPUTE_EMAIL_FROM");
   const effectiveFrom = smtpFromAddress();
@@ -134,7 +141,7 @@ export function getSmtpConfig(): SmtpConfig | null {
   const host = env("SMTP_HOST");
   const port = Number(env("SMTP_PORT"));
   const user = env("SMTP_USER");
-  const pass = env("SMTP_PASS");
+  const pass = normalizeSmtpPass(env("SMTP_PASS"), host);
   const from = smtpFromAddress();
   const secureFlag = env("SMTP_SECURE").toLowerCase();
 
