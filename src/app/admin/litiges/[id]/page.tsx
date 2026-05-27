@@ -13,6 +13,7 @@ import {
 } from "@/lib/admin/display";
 import { disputeEvidencePublicUrl } from "@/lib/storage/dispute-evidence-url";
 import { DisputeEvidencePreview } from "@/components/match/dispute-evidence-preview";
+import { getCurrentUser } from "@/lib/auth/session";
 
 export default async function AdminDisputeDetailPage({
   params,
@@ -30,6 +31,9 @@ export default async function AdminDisputeDetailPage({
 
   const playerAName = match.player_a_label ?? match.player_a_email;
   const playerBName = match.player_b_label ?? match.player_b_email;
+  const viewer = await getCurrentUser();
+  const viewerIsParticipant =
+    viewer?.id === match.player_a || viewer?.id === match.player_b;
 
   return (
     <div className="space-y-6">
@@ -83,16 +87,24 @@ export default async function AdminDisputeDetailPage({
             <dd className="font-mono text-xs text-zinc-400">{match.id}</dd>
           </div>
         </dl>
-        <p className="mt-3">
-          <Link
-            href={`/play/match/${match.id}`}
-            className="text-sm text-amber-400 hover:text-amber-300"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Ouvrir la salle joueur ↗
-          </Link>
-        </p>
+        <div className="mt-3">
+          {viewerIsParticipant ? (
+            <Link
+              href={`/play/match/${match.id}`}
+              className="text-sm text-amber-400 hover:text-amber-300"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Ouvrir la salle joueur ↗
+            </Link>
+          ) : (
+            <p className="text-sm text-zinc-500">
+              La salle joueur <span className="text-zinc-400">/play/match</span>{" "}
+              est accessible uniquement aux 2 participants (anti-bypass). Utilise
+              ce panneau admin pour modérer le litige.
+            </p>
+          )}
+        </div>
       </div>
 
       <AdminDisputeActions
