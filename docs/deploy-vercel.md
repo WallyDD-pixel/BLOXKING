@@ -75,6 +75,48 @@ Possible mais plus délicat :
 
 Souvent plus simple pour la prod Vercel : **migrer la base** vers Neon (ou équivalent), ou garder l’API sur EC2 et ne mettre que le front sur Vercel (hors périmètre de ce guide).
 
+### Migrations SQL sur EC2 (base locale du serveur)
+
+Les fichiers `db/07_*.sql`, `db/08_*.sql`, etc. sont dans le **dépôt Git** — ils n’existent pas sur le serveur tant que tu n’as pas fait `git pull`.
+
+**Erreur fréquente** : `cat: db/08_... No such file` → code pas à jour.  
+**Erreur fréquente** : `could not change directory ... Permission denied` → l’utilisateur `postgres` ne peut pas entrer dans `/home/ec2-user/...`.
+
+**Procédure recommandée** (sur EC2) :
+
+```bash
+cd ~/BLOXKING
+git pull
+bash scripts/apply-db-migrations.sh
+```
+
+Le script copie les fichiers SQL dans `/tmp` puis lance `psql` (évite le problème de permissions).
+
+**À la main** (une migration) :
+
+```bash
+cd /tmp
+sudo cp /home/ec2-user/BLOXKING/db/08_dispute_early_and_cancel_attachments.sql .
+sudo chmod 644 08_dispute_early_and_cancel_attachments.sql
+sudo -u postgres psql -d bloxking -f /tmp/08_dispute_early_and_cancel_attachments.sql
+```
+
+**Depuis ton PC** (si pas de git sur EC2) :
+
+```powershell
+scp -i "$env:USERPROFILE\.ssh\bloxking_dev" db/07_match_cancellation_requests.sql db/08_dispute_early_and_cancel_attachments.sql db/09_user_presence.sql ec2-user@13.62.55.67:/tmp/
+```
+
+Puis sur EC2 :
+
+```bash
+sudo -u postgres psql -d bloxking -f /tmp/07_match_cancellation_requests.sql
+sudo -u postgres psql -d bloxking -f /tmp/08_dispute_early_and_cancel_attachments.sql
+sudo -u postgres psql -d bloxking -f /tmp/09_user_presence.sql
+```
+
+Les migrations `07`, `08` et `09` sont idempotentes (`if not exists`, `create or replace`).
+
 ---
 
 ## 5. Preuves de litige (fichiers sur disque)
