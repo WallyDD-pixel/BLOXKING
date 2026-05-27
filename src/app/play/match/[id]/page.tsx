@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { MatchBackToList } from "@/components/match-back-to-list";
+import { MatchCheatRulesPopup } from "@/components/match/match-cheat-rules-popup";
 import { getCurrentUser } from "@/lib/auth/session";
 import { dbQueryOne } from "@/lib/db/query";
 import { expireStaleMatchesIfNeeded } from "@/lib/match/expire-stale-matches";
@@ -50,6 +51,7 @@ export default async function MatchPage({
   return (
     <div className="space-y-8 sm:space-y-10">
       <MatchBackToList />
+      <MatchCheatRulesPopup matchId={id} />
 
       <header className="relative border-b border-amber-500/15 pb-8 pl-1 sm:pb-10 sm:pl-2">
         <div className="pointer-events-none absolute left-0 top-0 h-9 w-1 rounded-full bg-gradient-to-b from-amber-400/90 to-amber-800/30 sm:h-11" />
