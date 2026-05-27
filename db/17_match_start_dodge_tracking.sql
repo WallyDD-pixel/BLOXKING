@@ -20,6 +20,8 @@ create or replace function public.get_start_dodge_count(
 returns int
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select coalesce(
     (
@@ -246,6 +248,7 @@ begin
 end;
 $$;
 
+grant select on public.player_opponent_start_dodges to bloxking;
 grant execute on function public.get_start_dodge_count(uuid, uuid) to public;
 grant execute on function public.record_start_dodge(uuid, uuid) to public;
 grant execute on function public.apply_start_dodge_forfeit(uuid, uuid) to public;

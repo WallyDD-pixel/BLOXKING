@@ -6,10 +6,7 @@ export async function getStartDodgeCountVsOpponent(
 ): Promise<number> {
   const row = await dbQueryOne<{ dodge_count: string }>(
     `
-    select coalesce(d.dodge_count, 0)::text as dodge_count
-    from public.player_opponent_start_dodges d
-    where d.user_id = $1
-      and d.opponent_id = $2
+    select public.get_start_dodge_count($1::uuid, $2::uuid)::text as dodge_count
     `,
     [userId, opponentId],
   );

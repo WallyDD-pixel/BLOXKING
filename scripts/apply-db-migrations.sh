@@ -26,6 +26,7 @@ MIGRATIONS=(
   "15_player_blame_moderation.sql"
   "16_elo_blame_penalty.sql"
   "17_match_start_dodge_tracking.sql"
+  "18_start_dodge_bloxking_grants.sql"
 )
 
 echo "Repo: $REPO_ROOT"
