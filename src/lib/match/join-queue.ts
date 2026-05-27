@@ -1,4 +1,5 @@
 import { dbQuery, dbQueryOne } from "@/lib/db/query";
+import { sameClientConnection } from "@/lib/http/client-ip";
 import { expireStaleMatchesIfNeeded } from "@/lib/match/expire-stale-matches";
 import {
   matchmakingBaseEloSpan,
@@ -30,7 +31,10 @@ async function countOpenMatchesForUser(userId: string): Promise<number> {
   return Number(row?.c ?? 0);
 }
 
-export async function joinRankedQueue(uid: string): Promise<JoinQueueResult> {
+export async function joinRankedQueue(
+  uid: string,
+  clientIp: string | null = null,
+): Promise<JoinQueueResult> {
   await sleepRandomJitterMs();
   await expireStaleMatchesIfNeeded();
 
@@ -61,6 +65,25 @@ export async function joinRankedQueue(uid: string): Promise<JoinQueueResult> {
       error:
         "Tu as déjà un match en cours. Termine-le avant de relancer une recherche.",
     };
+  }
+
+  if (clientIp) {
+    const otherInQueue = await dbQueryOne<{ user_id: string }>(
+      `
+      select user_id
+      from public.match_queue
+      where user_id <> $1
+        and client_ip = $2::inet
+      limit 1
+      `,
+      [uid, clientIp],
+    );
+    if (otherInQueue?.user_id) {
+      return {
+        error:
+          "Un autre compte est déjà en recherche depuis cette connexion. Utilise un seul compte à la fois.",
+      };
+    }
   }
 
   const sinceIso = new Date(Date.now() - 60_000).toISOString();
@@ -109,18 +132,23 @@ export async function joinRankedQueue(uid: string): Promise<JoinQueueResult> {
 
   if (existingQ) {
     await dbQueryOne(
-      `update public.match_queue set created_at = $2, last_seen_at = $2 where user_id = $1 returning user_id`,
-      [uid, now],
+      `
+      update public.match_queue
+      set created_at = $2, last_seen_at = $2, client_ip = $3::inet
+      where user_id = $1
+      returning user_id
+      `,
+      [uid, now, clientIp],
     );
   } else {
     await dbQueryOne(
       `
       insert into public.match_queue (
-        user_id, created_at, first_queued_at, last_seen_at, elo_snapshot, placement_snapshot
-      ) values ($1, $2, $2, $2, $3, $4)
+        user_id, created_at, first_queued_at, last_seen_at, elo_snapshot, placement_snapshot, client_ip
+      ) values ($1, $2, $2, $2, $3, $4, $5::inet)
       returning user_id
       `,
-      [uid, now, elo, pl],
+      [uid, now, elo, pl, clientIp],
     );
   }
 
@@ -145,9 +173,15 @@ export async function joinRankedQueue(uid: string): Promise<JoinQueueResult> {
     elo_snapshot: number;
     placement_snapshot: number;
     first_queued_at: string;
+    client_ip: string | null;
   }>(
     `
-    select user_id, elo_snapshot, placement_snapshot, first_queued_at
+    select
+      user_id,
+      elo_snapshot,
+      placement_snapshot,
+      first_queued_at,
+      host(client_ip) as client_ip
     from public.match_queue
     where user_id <> $1
     order by first_queued_at asc
@@ -159,6 +193,7 @@ export async function joinRankedQueue(uid: string): Promise<JoinQueueResult> {
   const eligible: typeof candidates = [];
   for (const row of candidates) {
     const pid = String(row.user_id);
+    if (sameClientConnection(clientIp, row.client_ip)) continue;
     if ((await countOpenMatchesForUser(pid)) > 0) {
       await dbQuery(`delete from public.match_queue where user_id = $1`, [pid]);
       continue;

@@ -1,7 +1,9 @@
 "use server";
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/session";
+import { getClientIpFromHeaders } from "@/lib/http/client-ip";
 import { dbQuery, dbQueryOne } from "@/lib/db/query";
 import { rpcJson } from "@/lib/db/rpc";
 import {
@@ -147,7 +149,8 @@ export async function joinQueue() {
   if (!uid) return { error: "Non connecté", matched: false };
 
   try {
-    const svc = await joinRankedQueue(uid);
+    const clientIp = getClientIpFromHeaders(await headers());
+    const svc = await joinRankedQueue(uid, clientIp);
     if ("error" in svc) {
       return { error: svc.error, matched: false };
     }
