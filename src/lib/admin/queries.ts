@@ -1,12 +1,15 @@
 import { dbQuery, dbQueryOne } from "@/lib/db/query";
+import { PRESENCE_ONLINE_MINUTES } from "@/lib/presence/constants";
 
 export type AdminStats = {
   users_total: number;
+  users_online: number;
   matches_total: number;
   matches_active: number;
   matches_disputed: number;
   matches_confirmed: number;
   open_challenges: number;
+  presence_window_minutes: number;
 };
 
 export async function getAdminStats(): Promise<AdminStats> {
@@ -14,6 +17,8 @@ export async function getAdminStats(): Promise<AdminStats> {
     `
     select
       (select count(*)::int from public.users) as users_total,
+      (select count(*)::int from public.users
+        where last_seen_at > now() - ($1::int * interval '1 minute')) as users_online,
       (select count(*)::int from public.matches) as matches_total,
       (select count(*)::int from public.matches
         where status in ('pending', 'disputed')) as matches_active,
@@ -24,17 +29,53 @@ export async function getAdminStats(): Promise<AdminStats> {
       (select count(*)::int from public.open_challenges
         where status = 'open') as open_challenges
     `,
+    [PRESENCE_ONLINE_MINUTES],
   );
-  return (
-    row ?? {
-      users_total: 0,
-      matches_total: 0,
-      matches_active: 0,
-      matches_disputed: 0,
-      matches_confirmed: 0,
-      open_challenges: 0,
-    }
-  );
+  const base = row ?? {
+    users_total: 0,
+    users_online: 0,
+    matches_total: 0,
+    matches_active: 0,
+    matches_disputed: 0,
+    matches_confirmed: 0,
+    open_challenges: 0,
+  };
+  return {
+    ...base,
+    presence_window_minutes: PRESENCE_ONLINE_MINUTES,
+  };
+}
+
+export type AdminOnlineUserRow = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  roblox_username: string | null;
+  last_seen_at: string;
+  last_seen_path: string | null;
+};
+
+export async function getAdminOnlineUsers(): Promise<AdminOnlineUserRow[]> {
+  try {
+    return dbQuery<AdminOnlineUserRow>(
+      `
+      select
+        id,
+        email,
+        display_name,
+        roblox_username,
+        last_seen_at,
+        last_seen_path
+      from public.users
+      where last_seen_at > now() - ($1::int * interval '1 minute')
+      order by last_seen_at desc
+      limit 100
+      `,
+      [PRESENCE_ONLINE_MINUTES],
+    );
+  } catch {
+    return [];
+  }
 }
 
 export type AdminMatchRow = {
@@ -357,6 +398,7 @@ export type AdminCancellationRequestRow = {
   reason: string;
   status: string;
   created_at: string;
+  attachment_paths: string[];
 };
 
 export async function listAdminCancellationRequests(
@@ -371,7 +413,8 @@ export async function listAdminCancellationRequests(
       coalesce(u.display_name, u.roblox_username) as requester_label,
       r.reason,
       r.status,
-      r.created_at
+      r.created_at,
+      coalesce(r.attachment_paths, '{}') as attachment_paths
     from public.match_cancellation_requests r
     join public.users u on u.id = r.requested_by
     where r.match_id = $1

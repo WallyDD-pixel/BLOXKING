@@ -577,6 +577,8 @@ export type MatchCancellationRequestRow = {
   reason: string;
   status: string;
   created_at: string;
+  attachment_paths: string[];
+  attachment_urls?: string[];
 };
 
 export async function listMatchCancellationRequests(
@@ -592,22 +594,47 @@ export async function listMatchCancellationRequests(
   if (!row || (row.player_a !== uid && row.player_b !== uid)) return { requests: [] };
 
   try {
-    const requests = await dbQuery<MatchCancellationRequestRow>(
+    const rows = await dbQuery<{
+      id: string;
+      requested_by: string;
+      reason: string;
+      status: string;
+      created_at: string;
+      attachment_paths: string[] | null;
+    }>(
       `
-      select id, requested_by, reason, status, created_at
+      select id, requested_by, reason, status, created_at, attachment_paths
       from public.match_cancellation_requests
       where match_id = $1
       order by created_at desc
       `,
       [matchId],
     );
+    const requests: MatchCancellationRequestRow[] = rows.map((r) => {
+      const attachment_paths = r.attachment_paths ?? [];
+      return {
+        id: r.id,
+        requested_by: r.requested_by,
+        reason: r.reason,
+        status: r.status,
+        created_at: r.created_at,
+        attachment_paths,
+        attachment_urls: attachment_paths.map((p) =>
+          disputeEvidencePublicUrl(p),
+        ),
+      };
+    });
     return { requests };
   } catch {
     return { requests: [] };
   }
 }
 
-export async function matchRequestCancellation(matchId: string, reason: string) {
+export async function matchRequestCancellation(
+  matchId: string,
+  reason: string,
+  attachmentPaths: string[] = [],
+) {
   const uid = await getUserId();
   if (!uid) return { error: "Non connecté" };
 
@@ -616,12 +643,16 @@ export async function matchRequestCancellation(matchId: string, reason: string) 
     return { error: mapMatchRpcError("cancellation_reason_too_short") };
   }
 
+  if (!validateDisputeStoragePaths(matchId, uid, attachmentPaths)) {
+    return { error: mapMatchRpcError("invalid_attachment_paths") };
+  }
+
   try {
     const p = rpcPayload(
       await callUserRpc(
         uid,
-        `select match_request_cancellation($1::uuid, $2::text) as result`,
-        [matchId, clean],
+        `select match_request_cancellation($1::uuid, $2::text, $3::text[]) as result`,
+        [matchId, clean, attachmentPaths],
       ),
     );
     if (p.error) return { error: mapMatchRpcError(String(p.error)) };

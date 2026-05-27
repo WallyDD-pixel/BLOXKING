@@ -157,6 +157,25 @@ export default async function AdminDisputeDetailPage({
                 <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">
                   {r.reason}
                 </p>
+                {r.attachment_paths.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    {r.attachment_paths.map((p) => {
+                      const url = disputeEvidencePublicUrl(p);
+                      return (
+                        <a
+                          key={p}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                          aria-label="Ouvrir la preuve"
+                        >
+                          <DisputeEvidencePreview url={url} objectPath={p} />
+                        </a>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -179,6 +198,25 @@ export default async function AdminDisputeDetailPage({
                 <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-400">
                   {r.reason}
                 </p>
+                {r.attachment_paths.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    {r.attachment_paths.map((p) => {
+                      const url = disputeEvidencePublicUrl(p);
+                      return (
+                        <a
+                          key={p}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                          aria-label="Ouvrir la preuve"
+                        >
+                          <DisputeEvidencePreview url={url} objectPath={p} />
+                        </a>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>

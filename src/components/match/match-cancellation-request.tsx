@@ -1,12 +1,27 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import {
+  useCallback,
+  useState,
+  useTransition,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import {
   matchRequestCancellation,
   type MatchCancellationRequestRow,
 } from "@/app/play/actions";
+import { DisputeEvidencePreview } from "@/components/match/dispute-evidence-preview";
+import { DisputeEvidenceUpload } from "@/components/match/dispute-evidence-upload";
 import { formatDateTimeFr } from "@/lib/format-datetime";
+import { disputeEvidencePublicUrl } from "@/lib/storage/dispute-evidence-url";
+import {
+  countVideosInPaths,
+  DISPUTE_MAX_ATTACHMENTS,
+  DISPUTE_MAX_VIDEOS_PER_BATCH,
+} from "@/lib/dispute-evidence";
+import { uploadDisputeEvidenceClient } from "@/lib/upload-dispute-evidence-client";
 
 type Props = {
   matchId: string;
@@ -23,6 +38,8 @@ export function MatchCancellationRequest({
   const [pending, startTransition] = useTransition();
   const [reason, setReason] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [evidencePaths, setEvidencePaths] = useState<string[]>([]);
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [requests, setRequests] =
     useState<MatchCancellationRequestRow[]>(initialRequests);
 
@@ -33,19 +50,74 @@ export function MatchCancellationRequest({
     (r) => r.requested_by !== userId && r.status === "open",
   );
 
+  const appendEvidenceFiles = useCallback(
+    async (
+      fileList: FileList | null,
+      currentPaths: string[],
+      setPaths: Dispatch<SetStateAction<string[]>>,
+    ) => {
+      if (!fileList?.length) return;
+      const room = DISPUTE_MAX_ATTACHMENTS - currentPaths.length;
+      if (room <= 0) return;
+      const files = Array.from(fileList).slice(0, room);
+      setEvidenceBusy(true);
+      setErr(null);
+      let batch = [...currentPaths];
+      try {
+        for (const file of files) {
+          const maybeVideo =
+            file.type.startsWith("video/") ||
+            /\.(mp4|webm)$/i.test(file.name);
+          if (
+            maybeVideo &&
+            countVideosInPaths(batch) >= DISPUTE_MAX_VIDEOS_PER_BATCH
+          ) {
+            setErr("Une seule vidéo par envoi (max. 50 Mo, MP4 ou WebM).");
+            return;
+          }
+          const res = await uploadDisputeEvidenceClient(matchId, file);
+          if ("error" in res && res.error) {
+            setErr(res.error);
+            return;
+          }
+          if ("path" in res && res.path) {
+            batch = [...batch, res.path];
+            setPaths(batch);
+          }
+        }
+      } finally {
+        setEvidenceBusy(false);
+      }
+    },
+    [matchId],
+  );
+
   function submit() {
     setErr(null);
     startTransition(async () => {
-      const res = await matchRequestCancellation(matchId, reason);
+      const res = await matchRequestCancellation(
+        matchId,
+        reason,
+        evidencePaths,
+      );
       if (res.error) {
         setErr(res.error);
         return;
       }
       const now = new Date().toISOString();
+      const paths = [...evidencePaths];
       if (myOpen) {
         setRequests((prev) =>
           prev.map((r) =>
-            r.id === myOpen.id ? { ...r, reason: reason.trim(), created_at: now } : r,
+            r.id === myOpen.id
+              ? {
+                  ...r,
+                  reason: reason.trim(),
+                  created_at: now,
+                  attachment_paths: paths,
+                  attachment_urls: paths.map((p) => disputeEvidencePublicUrl(p)),
+                }
+              : r,
           ),
         );
       } else {
@@ -56,14 +128,22 @@ export function MatchCancellationRequest({
             reason: reason.trim(),
             status: "open",
             created_at: now,
+            attachment_paths: paths,
+            attachment_urls: paths.map((p) => disputeEvidencePublicUrl(p)),
           },
           ...prev,
         ]);
       }
       setReason("");
+      setEvidencePaths([]);
       router.refresh();
     });
   }
+
+  const displayPaths = myOpen?.attachment_paths ?? [];
+  const displayUrls =
+    myOpen?.attachment_urls ??
+    displayPaths.map((p) => disputeEvidencePublicUrl(p));
 
   return (
     <section className="rounded-2xl border border-zinc-700/70 bg-zinc-950/55 px-4 py-5 sm:px-6 sm:py-6">
@@ -72,8 +152,8 @@ export function MatchCancellationRequest({
       </h2>
       <p className="mt-2 max-w-prose text-sm leading-relaxed text-zinc-500">
         Si la partie ne peut pas se terminer normalement (déconnexion, bug, accord
-        mutuel…), décris la situation. Un modérateur pourra annuler le match
-        depuis l&apos;administration.
+        mutuel…), décris la situation et joins des preuves (images ou vidéo).
+        Un modérateur pourra annuler le match.
       </p>
 
       {myOpen ? (
@@ -85,10 +165,24 @@ export function MatchCancellationRequest({
             Demande en attente
           </p>
           <p className="mt-2 whitespace-pre-wrap leading-relaxed">{myOpen.reason}</p>
+          {displayPaths.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-3">
+              {displayPaths.map((p, i) => (
+                <a
+                  key={p}
+                  href={displayUrls[i]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block"
+                >
+                  <DisputeEvidencePreview url={displayUrls[i]} objectPath={p} />
+                </a>
+              ))}
+            </div>
+          ) : null}
           <p className="mt-2 text-xs text-amber-200/70">
-            Envoyée le{" "}
-            {formatDateTimeFr(myOpen.created_at)}. Tu peux
-            modifier le texte ci-dessous pour mettre à jour ta demande.
+            Envoyée le {formatDateTimeFr(myOpen.created_at)}. Tu peux mettre à
+            jour le texte et les pièces jointes ci-dessous.
           </p>
         </div>
       ) : null}
@@ -111,6 +205,16 @@ export function MatchCancellationRequest({
           className="mt-2 w-full resize-y rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600"
         />
       </label>
+
+      <DisputeEvidenceUpload
+        paths={evidencePaths}
+        setPaths={setEvidencePaths}
+        disabled={pending}
+        busy={evidenceBusy}
+        onPickFiles={(files) =>
+          void appendEvidenceFiles(files, evidencePaths, setEvidencePaths)
+        }
+      />
 
       {err ? (
         <p className="mt-2 text-sm text-red-400" role="alert">

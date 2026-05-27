@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AdminOnlineUsers } from "@/components/admin/admin-online-users";
 import { AdminSmtpTest } from "@/components/admin/admin-smtp-test";
 import { getAdminStats } from "@/lib/admin/queries";
 
@@ -45,6 +46,12 @@ export default async function AdminDashboardPage() {
           href="/admin/utilisateurs"
         />
         <StatCard
+          label={`En ligne (${stats.presence_window_minutes} min)`}
+          value={stats.users_online}
+          href="/admin#en-ligne"
+          tone="emerald"
+        />
+        <StatCard
           label="Matchs actifs"
           value={stats.matches_active}
           href="/admin/matchs?status=pending"
@@ -71,6 +78,13 @@ export default async function AdminDashboardPage() {
           label="Défis ouverts"
           value={stats.open_challenges}
           href="/admin/matchs"
+        />
+      </div>
+
+      <div id="en-ligne">
+        <AdminOnlineUsers
+          initialCount={stats.users_online}
+          initialWindowMinutes={stats.presence_window_minutes}
         />
       </div>
 

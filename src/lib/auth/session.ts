@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { randomBytes } from "crypto";
 import { dbQueryOne } from "@/lib/db/query";
+import { recordUserPresence } from "@/lib/presence/record";
 
 export const SESSION_COOKIE = "bk_session";
 
@@ -69,6 +70,8 @@ export async function createSession(userId: string): Promise<void> {
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
   });
+
+  void recordUserPresence(userId, "/").catch(() => null);
 }
 
 export async function destroySession(): Promise<void> {

@@ -28,6 +28,7 @@ import {
 import { isPlacementComplete, type RankedStatsPublic } from "@/lib/ranked";
 import { DisputeEvidencePreview } from "@/components/match/dispute-evidence-preview";
 import { DisputeEvidenceUpload } from "@/components/match/dispute-evidence-upload";
+import { MatchDisputeOpenForm } from "@/components/match/match-dispute-open-form";
 import { MatchOpponentChatWidget } from "@/components/match/match-opponent-chat-widget";
 import { MatchCancellationRequest } from "@/components/match/match-cancellation-request";
 import { PvpRecordingTip } from "@/components/pvp-recording-tip";
@@ -1119,6 +1120,61 @@ export function MatchArenaClient({
                 </p>
               ) : null}
 
+              {!inDispute ? (
+                <div className="mt-6 rounded-xl border border-red-500/25 bg-red-950/10 px-4 py-4 sm:px-5 sm:py-5">
+                  <p className="font-mono text-[0.6rem] uppercase tracking-wider text-red-300/90">
+                    Litige / signalement modération
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+                    Ouvre un ticket pour que l&apos;équipe voie la situation —{" "}
+                    <strong className="font-medium text-zinc-200">
+                      même si aucun score n&apos;a été déclaré
+                    </strong>{" "}
+                    (déconnexion, triche, bug, désaccord futur…). Ajoute captures
+                    ou une vidéo du combat si tu l&apos;as.
+                  </p>
+                  {!disputeFlowOpen ? (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => setDisputeFlowOpen(true)}
+                      className="mt-4 min-h-[3rem] w-full rounded-xl border border-red-500/50 bg-red-950/40 px-5 py-3 text-sm font-semibold text-red-100 transition-colors hover:bg-red-500/15 sm:text-[0.95rem]"
+                    >
+                      Ouvrir un litige (ticket modération)
+                    </button>
+                  ) : (
+                    <MatchDisputeOpenForm
+                      variant={hasOppClaim ? "disagreement" : "early"}
+                      myClaimA={claimInt(myClaimA)}
+                      myClaimB={claimInt(myClaimB)}
+                      oppClaimA={claimInt(oppClaimA)}
+                      oppClaimB={claimInt(oppClaimB)}
+                      draft={disputeDraft}
+                      onDraftChange={setDisputeDraft}
+                      evidencePaths={disputeEvidencePaths}
+                      setEvidencePaths={setDisputeEvidencePaths}
+                      pending={pending}
+                      evidenceBusy={evidenceBusy}
+                      onPickFiles={appendEvidenceFiles}
+                      onSubmit={() =>
+                        run(() =>
+                          matchSubmitDisputeTicket(
+                            matchId,
+                            disputeDraft.trim(),
+                            disputeEvidencePaths,
+                          ),
+                        )
+                      }
+                      onCancel={() => {
+                        setDisputeFlowOpen(false);
+                        setDisputeEvidencePaths([]);
+                        setDisputeDraft("");
+                      }}
+                    />
+                  )}
+                </div>
+              ) : null}
+
               {hasOppClaim ? (
                 <div
                   className={
@@ -1136,106 +1192,11 @@ export function MatchArenaClient({
                   <p className="mt-2 font-mono text-[0.7rem] text-zinc-500 sm:text-xs">
                     Perspective globale · joueur A — joueur B
                   </p>
-                  {!inDispute ? (
-                  <div className="mt-5 rounded-xl border border-red-500/25 bg-red-950/10 px-4 py-4">
-                    <p className="font-mono text-[0.6rem] uppercase tracking-wider text-red-300/90">
-                      Désaccord · ticket modération
+                  {!inDispute && !claimsMatch(m) ? (
+                    <p className="mt-4 text-sm leading-relaxed text-zinc-500">
+                      Les scores ne concordent pas — utilise « Ouvrir un litige »
+                      ci-dessus pour alerter la modération.
                     </p>
-                    <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-                      Si le résultat affiché ne reflète pas la réalité, ouvre un
-                      ticket : les scores déclarés seront joints automatiquement.
-                      Ajoute des captures ou extraits de ton{" "}
-                      <strong className="font-medium text-zinc-200">
-                        enregistrement du combat
-                      </strong>{" "}
-                      si tu l&apos;as — c&apos;est la preuve la plus solide.
-                    </p>
-                    {!disputeFlowOpen ? (
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => setDisputeFlowOpen(true)}
-                        className="mt-4 min-h-[3rem] w-full rounded-xl border border-red-500/50 bg-red-950/40 px-5 py-3 text-sm font-semibold text-red-100 transition-colors hover:bg-red-500/15 sm:text-[0.95rem]"
-                      >
-                        Il y a un problème — on n&apos;est pas d&apos;accord
-                      </button>
-                    ) : (
-                      <div className="mt-4 space-y-4 border-t border-red-500/20 pt-4">
-                        <div className="grid gap-3 rounded-lg border border-white/10 bg-black/30 px-3 py-3 sm:grid-cols-2">
-                          <div>
-                            <p className="font-mono text-[0.55rem] uppercase tracking-wider text-zinc-500">
-                              Ton score déclaré (A — B)
-                            </p>
-                            <p className="mt-1 font-[family-name:var(--font-bebas)] text-2xl tabular-nums text-white">
-                              {myClaimA ?? "—"} — {myClaimB ?? "—"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="font-mono text-[0.55rem] uppercase tracking-wider text-zinc-500">
-                              Score déclaré par l&apos;adversaire (A — B)
-                            </p>
-                            <p className="mt-1 font-[family-name:var(--font-bebas)] text-2xl tabular-nums text-amber-100/95">
-                              {oppClaimA ?? "—"} — {oppClaimB ?? "—"}
-                            </p>
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block font-mono text-[0.6rem] uppercase tracking-wider text-zinc-400">
-                            Pourquoi estimes-tu avoir raison (et pas l&apos;autre
-                            joueur) ?
-                          </label>
-                          <textarea
-                            value={disputeDraft}
-                            onChange={(e) => setDisputeDraft(e.target.value)}
-                            rows={5}
-                            maxLength={2000}
-                            placeholder="Explique clairement (min. 10 car.). Décris le déroulé ; tu peux joindre une vidéo du combat ci-dessous."
-                            className="mt-2 w-full resize-y rounded-xl border border-white/12 bg-zinc-950/90 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-red-500/35 focus:outline-none focus:ring-1 focus:ring-red-500/25"
-                          />
-                          <p className="mt-1 font-mono text-[0.55rem] text-zinc-600">
-                            {disputeDraft.trim().length}/2000 · caractères
-                            dangereux filtrés côté serveur
-                          </p>
-                        </div>
-                        <DisputeEvidenceUpload
-                          paths={disputeEvidencePaths}
-                          setPaths={setDisputeEvidencePaths}
-                          disabled={pending}
-                          busy={evidenceBusy}
-                          onPickFiles={appendEvidenceFiles}
-                        />
-                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                          <button
-                            type="button"
-                            disabled={pending || disputeDraft.trim().length < 10}
-                            onClick={() =>
-                              run(() =>
-                                matchSubmitDisputeTicket(
-                                  matchId,
-                                  disputeDraft.trim(),
-                                  disputeEvidencePaths,
-                                ),
-                              )
-                            }
-                            className="min-h-[3rem] rounded-xl border border-red-500/50 bg-red-950/30 px-5 py-3 font-mono text-xs font-semibold uppercase tracking-wider text-red-100 transition-colors hover:bg-red-500/20 disabled:opacity-40 sm:px-6"
-                          >
-                            Créer le ticket et ouvrir le litige
-                          </button>
-                          <button
-                            type="button"
-                            disabled={pending}
-                            onClick={() => {
-                              setDisputeFlowOpen(false);
-                              setDisputeEvidencePaths([]);
-                            }}
-                            className="text-sm text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline"
-                          >
-                            Annuler
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
                   ) : null}
                 </div>
               ) : hasMyClaim ? (
