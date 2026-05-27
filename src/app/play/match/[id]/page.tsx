@@ -9,6 +9,7 @@ import { enrichMatchLabels } from "@/lib/match/enrich-labels";
 import { getRankedSnapshotsForMatchParticipants } from "@/app/play/actions";
 import { MatchArenaClient, type MatchArenaRow } from "./match-arena-client";
 import { listMatchCancellationRequests } from "@/app/play/actions";
+import { getStartDodgeCountVsOpponent } from "@/lib/match/start-dodge";
 
 export default async function MatchPage({
   params,
@@ -48,6 +49,12 @@ export default async function MatchPage({
       ? await listMatchCancellationRequests(id)
       : { requests: [] };
 
+  const opponentId = m.player_a === user.id ? m.player_b : m.player_a;
+  const startDodgeCountVsOpponent = await getStartDodgeCountVsOpponent(
+    user.id,
+    opponentId,
+  );
+
   return (
     <div className="space-y-8 sm:space-y-10">
       <MatchBackToList />
@@ -81,6 +88,7 @@ export default async function MatchPage({
         initialRankedB={rankedB}
         sourceLabel={sourceLabel}
         initialCancellationRequests={cancellationRequests}
+        startDodgeCountVsOpponent={startDodgeCountVsOpponent}
       />
 
       <div className="flex flex-wrap items-center gap-4 border-t border-white/10 pt-6">

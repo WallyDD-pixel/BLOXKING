@@ -30,6 +30,7 @@ import { DisputeEvidencePreview } from "@/components/match/dispute-evidence-prev
 import { DisputeEvidenceUpload } from "@/components/match/dispute-evidence-upload";
 import { MatchDisputeOpenForm } from "@/components/match/match-dispute-open-form";
 import { MatchOpponentChatWidget } from "@/components/match/match-opponent-chat-widget";
+import { MatchStartDodgeWarning } from "@/components/match/match-start-dodge-warning";
 import { MatchCancellationRequest } from "@/components/match/match-cancellation-request";
 import { PvpRecordingTip } from "@/components/pvp-recording-tip";
 import {
@@ -182,6 +183,7 @@ export function MatchArenaClient({
   initialRankedB,
   sourceLabel,
   initialCancellationRequests = [],
+  startDodgeCountVsOpponent = 0,
 }: {
   matchId: string;
   userId: string;
@@ -190,6 +192,7 @@ export function MatchArenaClient({
   initialRankedB: RankedStatsPublic | null;
   sourceLabel: string;
   initialCancellationRequests?: MatchCancellationRequestRow[];
+  startDodgeCountVsOpponent?: number;
 }) {
   const router = useRouter();
   const [m, setM] = useState<MatchArenaRow>(initialMatch);
@@ -217,6 +220,7 @@ export function MatchArenaClient({
   const isA = m.player_a === userId;
   const labelA = m.player_a_label ?? "Joueur A";
   const labelB = m.player_b_label ?? "Joueur B";
+  const opponentLabel = isA ? labelB : labelA;
   const robloxA = m.player_a_roblox ?? m.player_a_label ?? "—";
   const robloxB = m.player_b_roblox ?? m.player_b_label ?? "—";
 
@@ -709,12 +713,20 @@ export function MatchArenaClient({
               en bas à droite.
             </p>
           </div>
+          {startDodgeCountVsOpponent > 0 && !startDeadlinePassed ? (
+            <div className="mt-4">
+              <MatchStartDodgeWarning
+                opponentLabel={opponentLabel}
+                dodgeCountVsOpponent={startDodgeCountVsOpponent}
+              />
+            </div>
+          ) : null}
           {startDeadlinePassed ? (
             <p
               className="mt-4 rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/95"
               role="status"
             >
-              Délai écoulé — annulation en cours… Recharge dans quelques secondes
+              Délai écoulé — traitement en cours… Recharge dans quelques secondes
               ou retourne à la recherche.
             </p>
           ) : null}
@@ -1371,6 +1383,33 @@ export function MatchArenaClient({
             })
           }
         />
+      ) : null}
+
+      {confirmed && m.cancel_reason === "dodge_forfeit" ? (
+        <p
+          className={`rounded-xl border px-4 py-4 text-sm leading-relaxed sm:px-6 ${
+            (isA && displayScore.a < displayScore.b) ||
+            (!isA && displayScore.b < displayScore.a)
+              ? "border-red-500/35 bg-red-500/10 text-red-100/95"
+              : "border-emerald-500/35 bg-emerald-500/10 text-emerald-100/95"
+          }`}
+          role="status"
+        >
+          {(isA && displayScore.a < displayScore.b) ||
+          (!isA && displayScore.b < displayScore.a) ? (
+            <>
+              Match perdu automatiquement : tu as esquivé le début (2 min) une{" "}
+              <strong className="text-white">4e fois</strong> contre{" "}
+              <strong className="text-white">{opponentLabel}</strong>. Score
+              enregistré 2-0 pour l&apos;adversaire.
+            </>
+          ) : (
+            <>
+              Victoire automatique : ton adversaire a esquivé le début une 4e
+              fois contre toi. Score enregistré 2-0 en ta faveur.
+            </>
+          )}
+        </p>
       ) : null}
 
       {confirmed ? (

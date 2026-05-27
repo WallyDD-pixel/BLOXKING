@@ -25,6 +25,7 @@ MIGRATIONS=(
   "14_matchmaking_avoid_rematch.sql"
   "15_player_blame_moderation.sql"
   "16_elo_blame_penalty.sql"
+  "17_match_start_dodge_tracking.sql"
 )
 
 echo "Repo: $REPO_ROOT"
