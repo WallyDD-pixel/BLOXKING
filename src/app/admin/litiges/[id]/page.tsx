@@ -170,7 +170,11 @@ export default async function AdminDisputeDetailPage({
             {chat.map((c) => (
               <li key={c.id} className="text-sm">
                 <span className="font-medium text-zinc-400">
-                  {c.author_email}
+                  {c.author_is_admin
+                    ? `${process.env.ADMIN_CHAT_NAME ?? "Warren"} (Admin)`
+                    : c.author_roblox_username ??
+                      c.author_display_name ??
+                      c.author_email}
                 </span>
                 <span className="text-zinc-600">
                   {" "}

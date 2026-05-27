@@ -287,6 +287,9 @@ export type AdminChatRow = {
   id: string;
   author_id: string;
   author_email: string;
+  author_display_name: string | null;
+  author_roblox_username: string | null;
+  author_is_admin: boolean;
   body: string;
   created_at: string;
 };
@@ -295,7 +298,11 @@ export async function listAdminChat(matchId: string): Promise<AdminChatRow[]> {
   return dbQuery<AdminChatRow>(
     `
     select
-      c.id, c.author_id, u.email as author_email,
+      c.id, c.author_id,
+      u.email as author_email,
+      u.display_name as author_display_name,
+      u.roblox_username as author_roblox_username,
+      coalesce(u.is_admin, false) as author_is_admin,
       c.body, c.created_at
     from public.match_dispute_chat_messages c
     join public.users u on u.id = c.author_id
