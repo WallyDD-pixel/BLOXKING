@@ -3,11 +3,14 @@ import "server-only";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 
+/** Sous-dossier fixe (évite le traçage NFT « whole project » côté Turbopack/Vercel). */
+const EVIDENCE_SUBDIR = path.join(".data", "dispute-evidence");
+
 function storageRoot(): string {
   if (process.env.DISPUTE_EVIDENCE_DIR) {
     return process.env.DISPUTE_EVIDENCE_DIR;
   }
-  return path.join(process.cwd(), ".data", "dispute-evidence");
+  return path.join(/* turbopackIgnore: true */ process.cwd(), EVIDENCE_SUBDIR);
 }
 
 export async function saveDisputeEvidenceFile(
