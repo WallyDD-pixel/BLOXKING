@@ -53,6 +53,7 @@ export function MatchCheatRulesPopup({ matchId }: { matchId: string }) {
           </p>
           <ul className="space-y-2 pl-5 text-sm leading-relaxed text-zinc-300">
             <li>V4 (interdit)</li>
+            <li>Dragon V (interdit)</li>
             <li>no heal (interdit)</li>
             <li>mob (interdit)</li>
             <li>no macro (interdit)</li>

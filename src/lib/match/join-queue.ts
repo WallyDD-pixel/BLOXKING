@@ -4,6 +4,7 @@ import {
   matchmakingBaseEloSpan,
   pickBestQueuePartner,
 } from "@/lib/match/matchmaking-pairing";
+import { loadRecentQueueOpponents } from "@/lib/match/recent-opponents";
 import { mapMatchRpcError } from "@/lib/match-rpc-errors";
 
 export type JoinQueueResult =
@@ -154,11 +155,15 @@ export async function joinRankedQueue(uid: string): Promise<JoinQueueResult> {
     eligible.push(row);
   }
 
+  const recentOpponents = await loadRecentQueueOpponents(uid);
+
   const partner = pickBestQueuePartner(
     myEloSnap,
     myPlSnap,
     span,
     eligible,
+    recentOpponents,
+    waitSec,
   );
 
   if (!partner) return { ok: true, matched: false };

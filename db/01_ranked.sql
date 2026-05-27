@@ -351,6 +351,36 @@ as $$
   select greatest(0, 5 - least(greatest(p_pl, 0), 5)) * 45;
 $$;
 
+create or replace function public.matchmaking_rematch_penalty(p_uid uuid, p_opp uuid)
+returns int
+language sql
+stable
+as $$
+  with recent as (
+    select count(*)::int as c, max(m.created_at) as last_at
+    from public.matches m
+    where m.source = 'queue'
+      and m.created_at > now() - interval '24 hours'
+      and (
+        (m.player_a = p_uid and m.player_b = p_opp)
+        or (m.player_a = p_opp and m.player_b = p_uid)
+      )
+  )
+  select
+    coalesce((select c from recent), 0) * 90
+    + case
+        when (select last_at from recent) > now() - interval '30 minutes' then 110
+        when (select last_at from recent) > now() - interval '2 hours' then 55
+        else 0
+      end
+    + case
+        when (select last_at from recent) > now() - interval '20 minutes' then 400
+        when coalesce((select c from recent), 0) >= 2
+          and (select last_at from recent) > now() - interval '3 hours' then 250
+        else 0
+      end;
+$$;
+
 drop function if exists public.join_ranked_queue();
 drop function if exists public.join_ranked_queue(jsonb);
 
@@ -467,7 +497,8 @@ begin
     + case
         when (v_my_pl >= 5) <> (mq.placement_snapshot >= 5) then 55
         else 0
-      end,
+      end
+    + public.matchmaking_rematch_penalty(uid, mq.user_id),
     mq.first_queued_at asc,
     mq.user_id asc
   limit 1
