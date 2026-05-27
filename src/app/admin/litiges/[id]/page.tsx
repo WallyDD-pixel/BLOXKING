@@ -2,13 +2,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { expireStaleMatchesIfNeeded } from "@/lib/match/expire-stale-matches";
 import { AdminDisputeActions } from "@/components/admin/admin-dispute-actions";
+import { AdminDisputeDecisionHistory } from "@/components/admin/admin-dispute-decision-history";
 import { AdminDisputeModeration } from "@/components/admin/admin-dispute-moderation";
 import {
   getAdminMatchDetail,
   listAdminChat,
   listAdminCancellationRequests,
+  listAdminDisputeDecisions,
   listAdminTickets,
 } from "@/lib/admin/queries";
+import { labelFromAdminUser } from "@/lib/admin/user-label";
 import {
   formatScore,
   matchStatusClass,
@@ -37,20 +40,38 @@ export default async function AdminDisputeDetailPage({
   const match = await getAdminMatchDetail(id);
   if (!match) notFound();
 
-  const [tickets, chat, cancellationRequests, modA, modB] = await Promise.all([
-    listAdminTickets(id),
-    listAdminChat(id),
-    listAdminCancellationRequests(id),
-    getPlayerModerationStatus(match.player_a),
-    getPlayerModerationStatus(match.player_b),
-  ]);
+  const [tickets, chat, cancellationRequests, decisions, modA, modB] =
+    await Promise.all([
+      listAdminTickets(id),
+      listAdminChat(id),
+      listAdminCancellationRequests(id),
+      listAdminDisputeDecisions(id),
+      getPlayerModerationStatus(match.player_a),
+      getPlayerModerationStatus(match.player_b),
+    ]);
 
   const openCancellationRequests = cancellationRequests.filter(
     (r) => r.status === "open",
   );
 
-  const playerAName = match.player_a_label ?? match.player_a_email;
-  const playerBName = match.player_b_label ?? match.player_b_email;
+  const playerAName = labelFromAdminUser(
+    {
+      email: match.player_a_email,
+      roblox_username: match.player_a_roblox_username,
+      display_name: match.player_a_display_name,
+    },
+    match.player_a_label,
+  );
+  const playerBName = labelFromAdminUser(
+    {
+      email: match.player_b_email,
+      roblox_username: match.player_b_roblox_username,
+      display_name: match.player_b_display_name,
+    },
+    match.player_b_label,
+  );
+  const isClosed =
+    match.status === "confirmed" || match.status === "cancelled";
   const viewer = await getCurrentUser();
   const viewerIsParticipant =
     viewer?.id === match.player_a || viewer?.id === match.player_b;
@@ -66,12 +87,12 @@ export default async function AdminDisputeDetailPage({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-lg font-semibold text-zinc-100">
-              {match.player_a_label ?? match.player_a_email}{" "}
-              <span className="text-zinc-500">vs</span>{" "}
-              {match.player_b_label ?? match.player_b_email}
+              {playerAName}{" "}
+              <span className="text-zinc-500">vs</span> {playerBName}
             </p>
-            <p className="mt-1 text-sm text-zinc-500">{match.player_a_email}</p>
-            <p className="text-sm text-zinc-500">{match.player_b_email}</p>
+            <p className="mt-1 text-sm text-zinc-600">
+              {match.player_a_email} · {match.player_b_email}
+            </p>
           </div>
           <span
             className={`rounded-full px-3 py-1 text-sm font-semibold ${matchStatusClass(match.status, match.dispute)}`}
@@ -137,7 +158,20 @@ export default async function AdminDisputeDetailPage({
         playerALabel={playerAName}
         playerBLabel={playerBName}
         openCancellationCount={openCancellationRequests.length}
+        isClosed={isClosed}
+        initialMapsA={
+          match.claim_from_a_maps_a != null
+            ? String(match.claim_from_a_maps_a)
+            : "2"
+        }
+        initialMapsB={
+          match.claim_from_a_maps_b != null
+            ? String(match.claim_from_a_maps_b)
+            : "0"
+        }
       />
+
+      <AdminDisputeDecisionHistory decisions={decisions} />
 
       {modA && modB ? (
         <AdminDisputeModeration
@@ -249,8 +283,12 @@ export default async function AdminDisputeDetailPage({
                 className="rounded-xl border border-white/10 bg-black/20 p-4"
               >
                 <p className="text-xs text-zinc-500">
-                  {t.opener_email} ·{" "}
-                  {formatDateTimeFr(t.created_at)}
+                  {labelFromAdminUser({
+                    email: t.opener_email,
+                    roblox_username: t.opener_roblox_username,
+                    display_name: t.opener_display_name,
+                  })}{" "}
+                  · {formatDateTimeFr(t.created_at)}
                 </p>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-300">
                   {t.body}

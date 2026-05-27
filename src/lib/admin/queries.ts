@@ -87,6 +87,10 @@ export type AdminMatchRow = {
   player_b: string;
   player_a_email: string;
   player_b_email: string;
+  player_a_roblox_username: string | null;
+  player_b_roblox_username: string | null;
+  player_a_display_name: string | null;
+  player_b_display_name: string | null;
   player_a_label: string | null;
   player_b_label: string | null;
   claim_from_a_maps_a: number | null;
@@ -107,6 +111,10 @@ const ADMIN_MATCH_SELECT = `
   m.player_a, m.player_b,
   ua.email as player_a_email,
   ub.email as player_b_email,
+  ua.roblox_username as player_a_roblox_username,
+  ub.roblox_username as player_b_roblox_username,
+  ua.display_name as player_a_display_name,
+  ub.display_name as player_b_display_name,
   m.player_a_label, m.player_b_label,
   m.claim_from_a_maps_a, m.claim_from_a_maps_b,
   m.claim_from_b_maps_a, m.claim_from_b_maps_b,
@@ -192,23 +200,60 @@ export type AdminDisputeRow = {
   created_at: string;
   player_a_email: string;
   player_b_email: string;
+  player_a_roblox_username: string | null;
+  player_b_roblox_username: string | null;
+  player_a_display_name: string | null;
+  player_b_display_name: string | null;
+  player_a_label: string | null;
+  player_b_label: string | null;
   ticket_count: number;
   first_ticket_at: string | null;
   chat_count: number;
+  last_decision_at: string | null;
+  last_decision_action: string | null;
+  last_decision_maps_a: number | null;
+  last_decision_maps_b: number | null;
 };
 
-export async function listAdminDisputes(): Promise<AdminDisputeRow[]> {
+const ADMIN_DISPUTE_LIST_SELECT = `
+  m.id as match_id,
+  m.status,
+  m.created_at,
+  ua.email as player_a_email,
+  ub.email as player_b_email,
+  ua.roblox_username as player_a_roblox_username,
+  ub.roblox_username as player_b_roblox_username,
+  ua.display_name as player_a_display_name,
+  ub.display_name as player_b_display_name,
+  m.player_a_label,
+  m.player_b_label,
+  coalesce(t.cnt, 0)::int as ticket_count,
+  t.first_at as first_ticket_at,
+  coalesce(c.cnt, 0)::int as chat_count,
+  d.last_at as last_decision_at,
+  d.last_action as last_decision_action,
+  d.last_maps_a as last_decision_maps_a,
+  d.last_maps_b as last_decision_maps_b
+`;
+
+const ADMIN_DISPUTE_DECISIONS_LATERAL = `
+  left join lateral (
+    select
+      dec.created_at as last_at,
+      dec.action as last_action,
+      dec.maps_a as last_maps_a,
+      dec.maps_b as last_maps_b
+    from public.match_dispute_admin_decisions dec
+    where dec.match_id = m.id
+    order by dec.created_at desc
+    limit 1
+  ) d on true
+`;
+
+export async function listAdminDisputesOpen(): Promise<AdminDisputeRow[]> {
   return dbQuery<AdminDisputeRow>(
     `
-    select
-      m.id as match_id,
-      m.status,
-      m.created_at,
-      ua.email as player_a_email,
-      ub.email as player_b_email,
-      coalesce(t.cnt, 0)::int as ticket_count,
-      t.first_at as first_ticket_at,
-      coalesce(c.cnt, 0)::int as chat_count
+    select ${ADMIN_DISPUTE_LIST_SELECT}
     from public.matches m
     join public.users ua on ua.id = m.player_a
     join public.users ub on ub.id = m.player_b
@@ -222,10 +267,95 @@ export async function listAdminDisputes(): Promise<AdminDisputeRow[]> {
       from public.match_dispute_chat_messages
       group by match_id
     ) c on c.match_id = m.id
+    ${ADMIN_DISPUTE_DECISIONS_LATERAL}
     where m.status = 'disputed' or m.dispute = true
     order by coalesce(t.first_at, m.created_at) desc
   `,
   );
+}
+
+/** Litiges traités (score validé ou annulé par la modération). */
+export async function listAdminDisputesClosed(
+  limit = 80,
+): Promise<AdminDisputeRow[]> {
+  const lim = Math.min(Math.max(limit, 1), 200);
+  return dbQuery<AdminDisputeRow>(
+    `
+    select ${ADMIN_DISPUTE_LIST_SELECT}
+    from public.matches m
+    join public.users ua on ua.id = m.player_a
+    join public.users ub on ub.id = m.player_b
+    left join (
+      select match_id, count(*)::int as cnt, min(created_at) as first_at
+      from public.match_dispute_tickets
+      group by match_id
+    ) t on t.match_id = m.id
+    left join (
+      select match_id, count(*)::int as cnt
+      from public.match_dispute_chat_messages
+      group by match_id
+    ) c on c.match_id = m.id
+    ${ADMIN_DISPUTE_DECISIONS_LATERAL}
+    where m.status in ('confirmed', 'cancelled')
+      and (
+        exists (
+          select 1
+          from public.match_dispute_admin_decisions dec0
+          where dec0.match_id = m.id
+        )
+        or coalesce(t.cnt, 0) > 0
+        or coalesce(m.manual_dispute, false) = true
+      )
+    order by coalesce(d.last_at, t.first_at, m.created_at) desc
+    limit $1
+    `,
+    [lim],
+  );
+}
+
+export type AdminDisputeDecisionRow = {
+  id: string;
+  action: string;
+  maps_a: number | null;
+  maps_b: number | null;
+  previous_status: string;
+  new_status: string;
+  note: string | null;
+  created_at: string;
+  admin_email: string;
+  admin_roblox_username: string | null;
+  admin_display_name: string | null;
+};
+
+export async function listAdminDisputeDecisions(
+  matchId: string,
+): Promise<AdminDisputeDecisionRow[]> {
+  return dbQuery<AdminDisputeDecisionRow>(
+    `
+    select
+      d.id,
+      d.action,
+      d.maps_a,
+      d.maps_b,
+      d.previous_status,
+      d.new_status,
+      d.note,
+      d.created_at,
+      u.email as admin_email,
+      u.roblox_username as admin_roblox_username,
+      u.display_name as admin_display_name
+    from public.match_dispute_admin_decisions d
+    join public.users u on u.id = d.admin_id
+    where d.match_id = $1
+    order by d.created_at desc
+    `,
+    [matchId],
+  );
+}
+
+/** @deprecated Utiliser listAdminDisputesOpen */
+export async function listAdminDisputes(): Promise<AdminDisputeRow[]> {
+  return listAdminDisputesOpen();
 }
 
 export type AdminUserRow = {
@@ -325,6 +455,8 @@ export type AdminTicketRow = {
   id: string;
   opened_by: string;
   opener_email: string;
+  opener_roblox_username: string | null;
+  opener_display_name: string | null;
   body: string;
   created_at: string;
   attachment_paths: string[];
@@ -335,14 +467,22 @@ export async function listAdminTickets(matchId: string): Promise<AdminTicketRow[
     id: string;
     opened_by: string;
     opener_email: string;
+    opener_roblox_username: string | null;
+    opener_display_name: string | null;
     body: string;
     created_at: string;
     attachment_paths: string[] | null;
   }>(
     `
     select
-      t.id, t.opened_by, u.email as opener_email,
-      t.body, t.created_at, t.attachment_paths
+      t.id,
+      t.opened_by,
+      u.email as opener_email,
+      u.roblox_username as opener_roblox_username,
+      u.display_name as opener_display_name,
+      t.body,
+      t.created_at,
+      t.attachment_paths
     from public.match_dispute_tickets t
     join public.users u on u.id = t.opened_by
     where t.match_id = $1

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { AdminChatRow } from "@/lib/admin/queries";
+import { formatAdminUserLabel } from "@/lib/admin/user-label";
 import { formatDateTimeFr } from "@/lib/format-datetime";
 
 type MatchPlayers = {
@@ -9,6 +10,10 @@ type MatchPlayers = {
   player_b_label: string | null;
   player_a_email: string;
   player_b_email: string;
+  player_a_roblox_username?: string | null;
+  player_b_roblox_username?: string | null;
+  player_a_display_name?: string | null;
+  player_b_display_name?: string | null;
 };
 
 function authorLabel(msg: AdminChatRow, match: MatchPlayers): string {
@@ -16,16 +21,26 @@ function authorLabel(msg: AdminChatRow, match: MatchPlayers): string {
     return process.env.ADMIN_CHAT_NAME ?? "Modération";
   }
   if (msg.author_id === match.player_a) {
-    return match.player_a_label ?? match.player_a_email;
+    return formatAdminUserLabel({
+      roblox_username: match.player_a_roblox_username,
+      display_name: match.player_a_display_name,
+      match_label: match.player_a_label,
+      email: match.player_a_email,
+    });
   }
   if (msg.author_id === match.player_b) {
-    return match.player_b_label ?? match.player_b_email;
+    return formatAdminUserLabel({
+      roblox_username: match.player_b_roblox_username,
+      display_name: match.player_b_display_name,
+      match_label: match.player_b_label,
+      email: match.player_b_email,
+    });
   }
-  return (
-    msg.author_roblox_username ??
-    msg.author_display_name ??
-    msg.author_email
-  );
+  return formatAdminUserLabel({
+    roblox_username: msg.author_roblox_username,
+    display_name: msg.author_display_name,
+    email: msg.author_email,
+  });
 }
 
 function ChatMessageList({

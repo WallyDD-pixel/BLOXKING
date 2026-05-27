@@ -14,6 +14,9 @@ type Props = {
   playerALabel: string;
   playerBLabel: string;
   openCancellationCount?: number;
+  isClosed?: boolean;
+  initialMapsA?: string;
+  initialMapsB?: string;
 };
 
 export function AdminDisputeActions({
@@ -22,14 +25,17 @@ export function AdminDisputeActions({
   playerALabel,
   playerBLabel,
   openCancellationCount = 0,
+  isClosed = false,
+  initialMapsA = "2",
+  initialMapsB = "0",
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [mapsA, setMapsA] = useState("2");
-  const [mapsB, setMapsB] = useState("0");
+  const [mapsA, setMapsA] = useState(initialMapsA);
+  const [mapsB, setMapsB] = useState(initialMapsB);
   const [message, setMessage] = useState<string | null>(null);
 
-  const closed = status === "confirmed" || status === "cancelled";
+  const canReset = status === "pending" || status === "disputed";
   const a = Number(mapsA);
   const b = Number(mapsB);
   const bo3Valid =
@@ -68,10 +74,13 @@ export function AdminDisputeActions({
           ci-dessous pour les raisons.
         </p>
       ) : null}
-      {closed ? (
-        <p className="mt-2 text-sm text-zinc-500">Match déjà clôturé.</p>
-      ) : (
-        <>
+      {isClosed ? (
+        <p className="mt-2 rounded-lg border border-zinc-500/30 bg-zinc-800/40 px-3 py-2 text-sm text-zinc-300">
+          Litige fermé — tu peux corriger le score ou annuler le match. L&apos;ELO
+          sera recalculé si un score avait déjà été validé.
+        </p>
+      ) : null}
+      <>
           <div className="mt-4 flex flex-wrap items-end gap-3">
             <label className="text-sm text-zinc-400">
               Score BO3 (joueur A)
@@ -127,25 +136,28 @@ export function AdminDisputeActions({
             )}
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => run(() => adminResetDispute(matchId))}
-              className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-500/20 disabled:opacity-50"
-            >
-              Réinitialiser le litige
-            </button>
+            {canReset ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => run(() => adminResetDispute(matchId))}
+                className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-500/20 disabled:opacity-50"
+              >
+                Réinitialiser le litige
+              </button>
+            ) : null}
             <button
               type="button"
               disabled={pending}
               onClick={() => run(() => adminCancelMatch(matchId))}
               className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-100 hover:bg-red-500/20 disabled:opacity-50"
             >
-              Annuler le match
+              {isClosed && status === "confirmed"
+                ? "Annuler après validation"
+                : "Annuler le match"}
             </button>
           </div>
         </>
-      )}
       {message ? (
         <p
           className={`mt-3 text-sm ${message === "OK" ? "text-emerald-400" : "text-red-400"}`}
