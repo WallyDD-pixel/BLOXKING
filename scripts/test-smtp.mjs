@@ -17,8 +17,9 @@ function env(key) {
 const host = env("SMTP_HOST");
 const port = Number(env("SMTP_PORT"));
 const user = env("SMTP_USER");
-const pass = env("SMTP_PASS");
-const from = env("DISPUTE_EMAIL_FROM") || env("SMTP_FROM");
+let pass = env("SMTP_PASS");
+if (/gmail|googlemail/i.test(host)) pass = pass.replace(/\s+/g, "");
+const from = env("DISPUTE_EMAIL_FROM") || env("SMTP_FROM") || user;
 const to = process.argv[2] || user;
 
 if (!host || !port || !user || !pass || !from) {
