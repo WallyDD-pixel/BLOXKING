@@ -1,4 +1,5 @@
 import { dbQuery, dbQueryOne } from "@/lib/db/query";
+import { expireStaleMatchesIfNeeded } from "@/lib/match/expire-stale-matches";
 import { mapMatchRpcError } from "@/lib/match-rpc-errors";
 
 export type JoinQueueResult =
@@ -26,6 +27,7 @@ async function countOpenMatchesForUser(userId: string): Promise<number> {
 
 export async function joinRankedQueue(uid: string): Promise<JoinQueueResult> {
   await sleepRandomJitterMs();
+  await expireStaleMatchesIfNeeded();
 
   const coolRow = await dbQueryOne<{ queue_available_after: string | null }>(
     `select queue_available_after from public.player_ranked_stats where user_id = $1`,

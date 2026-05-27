@@ -36,6 +36,10 @@ import {
 } from "@/lib/dispute-evidence";
 import { uploadDisputeEvidenceClient } from "@/lib/upload-dispute-evidence-client";
 import { PVP_RECORDING_DISPUTE_HINT } from "@/lib/pvp-recording-copy";
+import {
+  formatCountdownMs,
+  matchStartDeadlineMs,
+} from "@/lib/match/expire-stale-matches";
 
 export type MatchArenaRow = {
   id: string;
@@ -56,6 +60,7 @@ export type MatchArenaRow = {
   b_accepts_a_claim?: boolean;
   a_accepts_b_claim?: boolean;
   dispute?: boolean;
+  cancel_reason?: string | null;
   created_at: string;
   elo_delta_a?: number | null;
   elo_delta_b?: number | null;
@@ -193,6 +198,7 @@ export function MatchArenaClient({
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [chatMessages, setChatMessages] = useState<DisputeChatMessageRow[]>([]);
   const [chatDraft, setChatDraft] = useState("");
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const isA = m.player_a === userId;
   const labelA = m.player_a_label ?? "Joueur A";
@@ -203,6 +209,10 @@ export function MatchArenaClient({
   const myStarted = isA ? !!m.match_started_a : !!m.match_started_b;
   const oppStarted = isA ? !!m.match_started_b : !!m.match_started_a;
   const bothStarted = !!m.match_started_a && !!m.match_started_b;
+  const startDeadlineMs = matchStartDeadlineMs(m.created_at);
+  const startCountdownMs = Math.max(0, startDeadlineMs - nowMs);
+  const startDeadlinePassed =
+    m.status === "pending" && !bothStarted && startCountdownMs <= 0;
 
   const myClaimA = isA ? m.claim_from_a_maps_a : m.claim_from_b_maps_a;
   const myClaimB = isA ? m.claim_from_a_maps_b : m.claim_from_b_maps_b;
@@ -213,6 +223,12 @@ export function MatchArenaClient({
   const hasOppClaim = oppClaimA != null && oppClaimB != null;
 
   const inDispute = !!(m.dispute || m.status === "disputed");
+
+  useEffect(() => {
+    if (bothStarted || m.status !== "pending" || inDispute) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [bothStarted, m.status, inDispute]);
 
   /** Accord des deux déclarations : verrouillé sauf en litige (où on peut corriger). */
   const scoreLocked = claimsMatch(m) && !inDispute;
@@ -380,6 +396,13 @@ export function MatchArenaClient({
   }
 
   if (m.status === "cancelled") {
+    const startTimeout =
+      m.cancel_reason === "start_timeout" ||
+      (!m.cancel_reason &&
+        !m.match_started_a &&
+        !m.match_started_b &&
+        !m.dispute);
+
     return (
       <div className="match-arena-root space-y-8 sm:space-y-10">
         <section className="game-panel rounded-2xl border border-zinc-700/60 bg-zinc-950/80 px-5 py-8 sm:px-8 sm:py-10">
@@ -389,17 +412,34 @@ export function MatchArenaClient({
           <h2 className="game-title mt-3 font-[family-name:var(--font-bebas)] text-3xl tracking-wide text-white sm:text-4xl">
             Match annulé
           </h2>
-          <p className="mt-4 max-w-prose text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
-            Ce match a été annulé automatiquement : un litige avec ticket
-            modération est resté sans résolution pendant plus de{" "}
-            <strong className="font-medium text-zinc-200">30 minutes</strong>{" "}
-            après l&apos;ouverture du ticket. Aucun résultat ranked ni changement
-            d&apos;ELO n&apos;est enregistré.
-          </p>
-          <p className="mt-3 text-sm text-zinc-500">
-            Tu peux relancer une recherche ou un défi : ce match ne bloque plus
-            ta file.
-          </p>
+          {startTimeout ? (
+            <>
+              <p className="mt-4 max-w-prose text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
+                Les deux joueurs n&apos;ont pas confirmé le début du combat dans
+                les{" "}
+                <strong className="font-medium text-zinc-200">5 minutes</strong>{" "}
+                après la création du match. Le match a été annulé automatiquement
+                — aucun ELO n&apos;a changé.
+              </p>
+              <p className="mt-3 text-sm text-zinc-500">
+                Tu peux relancer une recherche ou accepter un autre défi.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-4 max-w-prose text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
+                Ce match a été annulé automatiquement : un litige avec ticket
+                modération est resté sans résolution pendant plus de{" "}
+                <strong className="font-medium text-zinc-200">30 minutes</strong>{" "}
+                après l&apos;ouverture du ticket. Aucun résultat ranked ni changement
+                d&apos;ELO n&apos;est enregistré.
+              </p>
+              <p className="mt-3 text-sm text-zinc-500">
+                Tu peux relancer une recherche ou un défi : ce match ne bloque plus
+                ta file.
+              </p>
+            </>
+          )}
           <Link
             href="/play/recherche"
             className="game-btn-primary mt-8 inline-flex min-h-[3rem] items-center justify-center px-8 py-3 font-[family-name:var(--font-bebas)] text-xl tracking-wide text-zinc-950"
@@ -583,6 +623,10 @@ export function MatchArenaClient({
             <p className="mt-3 max-w-prose text-sm leading-relaxed text-zinc-400 sm:text-[0.95rem]">
               Les deux joueurs doivent confirmer que la partie a bien commencé en
               jeu avant la saisie du score.{" "}
+              <strong className="font-medium text-amber-200/95">
+                Délai : {formatCountdownMs(startCountdownMs)}
+              </strong>{" "}
+              — sinon le match est annulé et vous pourrez relancer une recherche.{" "}
               <strong className="font-medium text-zinc-200">
                 Lance l&apos;enregistrement du combat maintenant
               </strong>{" "}
@@ -594,6 +638,15 @@ export function MatchArenaClient({
               en bas à droite.
             </p>
           </div>
+          {startDeadlinePassed ? (
+            <p
+              className="mt-4 rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/95"
+              role="status"
+            >
+              Délai écoulé — annulation en cours… Recharge dans quelques secondes
+              ou retourne à la recherche.
+            </p>
+          ) : null}
           <PvpRecordingTip variant="callout" className="mt-6" />
           <div className="mt-6 flex flex-col gap-4 sm:mt-7 sm:flex-row sm:flex-wrap sm:items-center sm:gap-5">
             {myStarted ? (
@@ -623,7 +676,7 @@ export function MatchArenaClient({
             ) : (
               <button
                 type="button"
-                disabled={pending}
+                disabled={pending || startDeadlinePassed}
                 onClick={() => run(() => matchConfirmStarted(matchId))}
                 className="game-btn-primary w-full min-h-[3rem] px-5 py-3.5 disabled:opacity-50 sm:w-auto sm:min-h-0 sm:px-6 sm:py-3"
               >

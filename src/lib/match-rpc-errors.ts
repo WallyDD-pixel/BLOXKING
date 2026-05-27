@@ -11,6 +11,8 @@ export function mapMatchRpcError(code: string): string {
       "Les deux déclarations concordent — le score ne peut plus être modifié ici.",
     acceptances_incomplete: "Chacun doit valider la déclaration de l’autre.",
     match_not_started_by_both: "Les deux joueurs doivent confirmer le début.",
+    match_start_deadline_passed:
+      "Délai dépassé : le match a été annulé car les deux joueurs n’ont pas confirmé le début à temps.",
     no_active_dispute_or_forbidden: "Aucun litige actif à réinitialiser.",
     not_found_or_forbidden: "Action impossible (match introuvable ou déjà clôturé).",
     active_match_in_progress:

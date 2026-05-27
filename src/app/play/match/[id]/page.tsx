@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { MatchBackToList } from "@/components/match-back-to-list";
 import { getCurrentUser } from "@/lib/auth/session";
 import { dbQueryOne } from "@/lib/db/query";
-import { rpcJsonSystem } from "@/lib/db/rpc";
+import { expireStaleMatchesIfNeeded } from "@/lib/match/expire-stale-matches";
 import { enrichMatchLabels } from "@/lib/match/enrich-labels";
 import { getRankedSnapshotsForMatchParticipants } from "@/app/play/actions";
 import { MatchArenaClient, type MatchArenaRow } from "./match-arena-client";
@@ -23,9 +23,7 @@ export default async function MatchPage({
     /* labels optionnels */
   }
 
-  await rpcJsonSystem(
-    `select expire_disputed_matches_after_ticket_timeout() as result`,
-  );
+  await expireStaleMatchesIfNeeded();
 
   const match = await dbQueryOne<MatchArenaRow>(
     `select * from public.matches where id = $1`,

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/session";
 import { dbQuery, dbQueryOne } from "@/lib/db/query";
-import { rpcJson, rpcJsonSystem } from "@/lib/db/rpc";
+import { rpcJson } from "@/lib/db/rpc";
 import {
   sanitizeDisputeChatMessage,
   sanitizeDisputeExplanation,
@@ -17,6 +17,7 @@ import { notifyMatchResultEmails } from "@/lib/notifications/match-result-notify
 import { mapMatchRpcError } from "@/lib/match-rpc-errors";
 import { enrichMatchLabels } from "@/lib/match/enrich-labels";
 import { joinRankedQueue } from "@/lib/match/join-queue";
+import { expireStaleMatchesIfNeeded } from "@/lib/match/expire-stale-matches";
 import { disputeEvidencePublicUrl } from "@/lib/storage/dispute-evidence-url";
 import type { RankedStatsPublic } from "@/lib/ranked";
 
@@ -49,11 +50,9 @@ async function callUserRpc(
   return raw as Record<string, unknown>;
 }
 
-/** Annule les litiges non traités depuis 30 min après le 1er ticket (RPC idempotente). */
-async function expireDisputedMatchesIfNeeded() {
-  await rpcJsonSystem(
-    `select expire_disputed_matches_after_ticket_timeout() as result`,
-  );
+/** Annule les matchs / litiges expirés (RPC idempotentes). */
+async function expireStaleMatchesIfNeededAction() {
+  await expireStaleMatchesIfNeeded();
 }
 
 export type OngoingMatchRow = {
@@ -93,7 +92,7 @@ export async function listOngoingMatches(): Promise<{ rows: OngoingMatchRow[] }>
   const uid = await getUserId();
   if (!uid) return { rows: [] };
 
-  await expireDisputedMatchesIfNeeded();
+  await expireStaleMatchesIfNeededAction();
 
   try {
     const rows = await dbQuery<OngoingMatchRow>(
@@ -118,7 +117,7 @@ export async function listMatchHistory(
   const uid = await getUserId();
   if (!uid) return { rows: [] };
 
-  await expireDisputedMatchesIfNeeded();
+  await expireStaleMatchesIfNeededAction();
 
   const lim = Math.min(Math.max(limit, 1), 200);
   try {
@@ -147,6 +146,8 @@ export async function createChallenge() {
     user?.roblox_username ?? user?.display_name ?? user?.email?.split("@")[0] ?? "Joueur";
 
   try {
+    await expireStaleMatchesIfNeededAction();
+
     const active = await dbQueryOne<{ c: string }>(
       `
       select count(*)::text as c from public.matches
@@ -208,6 +209,8 @@ export async function acceptChallenge(challengeId: string) {
   if (!uid) return { error: "Non connecté" };
 
   try {
+    await expireStaleMatchesIfNeededAction();
+
     const payload = await callUserRpc(
       uid,
       `select accept_open_challenge($1::uuid) as result`,
@@ -359,7 +362,7 @@ export async function getMatchById(matchId: string) {
     return { match: null, rankedA: null, rankedB: null };
   }
 
-  await expireDisputedMatchesIfNeeded();
+  await expireStaleMatchesIfNeededAction();
 
   try {
     const data = await dbQueryOne<Record<string, unknown>>(
