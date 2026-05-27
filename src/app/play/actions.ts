@@ -14,6 +14,11 @@ import {
   notifyDisputeTicketEmail,
 } from "@/lib/notifications/dispute-notify";
 import { notifyMatchResultEmails } from "@/lib/notifications/match-result-notify";
+import {
+  notifyDisputeOpenedInApp,
+  notifyMatchResultInApp,
+  notifyOtherPlayerDisputeMessageInApp,
+} from "@/lib/notifications-inapp/events";
 import { mapMatchRpcError } from "@/lib/match-rpc-errors";
 import { enrichMatchLabels } from "@/lib/match/enrich-labels";
 import { joinRankedQueue } from "@/lib/match/join-queue";
@@ -416,6 +421,7 @@ export async function postDisputeChatMessage(matchId: string, body: string) {
       authorId: uid,
       message: clean,
     }).catch(() => null);
+    void notifyOtherPlayerDisputeMessageInApp(matchId, uid).catch(() => null);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };
@@ -611,6 +617,7 @@ export async function matchSubmitDisputeTicket(
       authorId: uid,
       explanation: clean,
     }).catch(() => null);
+    void notifyDisputeOpenedInApp(matchId, uid).catch(() => null);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };
@@ -662,6 +669,7 @@ export async function matchFinalize(matchId: string) {
     if (p.error) return { error: mapMatchRpcError(p.error) };
     revalidateMatchPaths(matchId);
     void notifyMatchResultEmails(matchId);
+    void notifyMatchResultInApp(matchId).catch(() => null);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };

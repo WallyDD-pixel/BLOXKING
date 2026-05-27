@@ -18,6 +18,7 @@ MIGRATIONS=(
   "07_match_cancellation_requests.sql"
   "08_dispute_early_and_cancel_attachments.sql"
   "09_user_presence.sql"
+  "10_in_app_notifications.sql"
 )
 
 echo "Repo: $REPO_ROOT"

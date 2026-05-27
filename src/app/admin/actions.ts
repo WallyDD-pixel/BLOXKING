@@ -6,6 +6,11 @@ import { rpcJson } from "@/lib/db/rpc";
 import { sanitizeDisputeChatMessage } from "@/lib/dispute-evidence";
 import { notifyDisputeChatEmail } from "@/lib/notifications/dispute-notify";
 import { notifyMatchResultEmails } from "@/lib/notifications/match-result-notify";
+import {
+  notifyMatchCancelledInApp,
+  notifyMatchResultInApp,
+  notifyOtherPlayerDisputeMessageInApp,
+} from "@/lib/notifications-inapp/events";
 
 function rpcPayload(raw: Record<string, unknown>) {
   return raw;
@@ -57,6 +62,7 @@ export async function adminResolveMatch(
     revalidateAdmin(matchId);
     revalidatePath(`/play/match/${matchId}`);
     void notifyMatchResultEmails(matchId);
+    void notifyMatchResultInApp(matchId).catch(() => null);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -81,6 +87,7 @@ export async function adminCancelMatch(
     );
     if (p.error) return { error: "Impossible d’annuler ce match." };
     revalidateAdmin(matchId);
+    void notifyMatchCancelledInApp(matchId).catch(() => null);
     return { ok: true };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Erreur" };
@@ -136,6 +143,7 @@ export async function adminPostDisputeChatMessage(
       authorId: admin.id,
       message: clean,
     }).catch(() => null);
+    void notifyOtherPlayerDisputeMessageInApp(matchId, admin.id, true).catch(() => null);
     return { ok: true };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Erreur" };

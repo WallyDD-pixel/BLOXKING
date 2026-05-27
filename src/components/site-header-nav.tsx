@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { signOut } from "@/app/auth/actions";
 import { DiscordInviteLink } from "@/components/discord-invite-link";
+import { NotificationsBell } from "@/components/notifications-bell";
 import { YoutubeChannelLink } from "@/components/youtube-channel-link";
 import { DISCORD_INVITE_URL, YOUTUBE_CHANNEL_URL } from "@/lib/site-links";
 
@@ -214,6 +215,12 @@ export function SiteHeaderNav({ isLoggedIn, isAdmin = false, display }: Props) {
               <span>Classement</span>
               <ChevronRight className={linkChevron} />
             </Link>
+            {isLoggedIn ? (
+              <Link href="/notifications" className={linkClass} onClick={closeDrawer}>
+                <span>Notifications</span>
+                <ChevronRight className={linkChevron} />
+              </Link>
+            ) : null}
             {!isLoggedIn ? (
               <Link
                 href="/connexion"
@@ -334,6 +341,7 @@ export function SiteHeaderNav({ isLoggedIn, isAdmin = false, display }: Props) {
         ) : null}
         <DiscordInviteLink variant="header" />
         <YoutubeChannelLink variant="header" />
+        {isLoggedIn ? <NotificationsBell /> : null}
         {isLoggedIn ? (
           <>
             <span
@@ -362,6 +370,7 @@ export function SiteHeaderNav({ isLoggedIn, isAdmin = false, display }: Props) {
       </nav>
 
       <div className="flex items-center gap-2 md:hidden">
+        {isLoggedIn ? <NotificationsBell className="min-h-10 min-w-10" /> : null}
         {isLoggedIn && display ? (
           <span
             className="max-w-[6.5rem] truncate rounded-lg border border-white/[0.07] bg-white/[0.04] px-2.5 py-1.5 text-[0.7rem] font-medium tracking-wide text-zinc-300"
