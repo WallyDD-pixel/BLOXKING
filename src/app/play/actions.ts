@@ -13,6 +13,7 @@ import {
   notifyDisputeChatEmail,
   notifyDisputeTicketEmail,
 } from "@/lib/notifications/dispute-notify";
+import { notifyMatchResultEmails } from "@/lib/notifications/match-result-notify";
 import { mapMatchRpcError } from "@/lib/match-rpc-errors";
 import { enrichMatchLabels } from "@/lib/match/enrich-labels";
 import { joinRankedQueue } from "@/lib/match/join-queue";
@@ -664,6 +665,7 @@ export async function matchFinalize(matchId: string) {
     );
     if (p.error) return { error: mapMatchRpcError(p.error) };
     revalidateMatchPaths(matchId);
+    void notifyMatchResultEmails(matchId);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };

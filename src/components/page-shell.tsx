@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { AdSenseScript } from "@/components/ads/adsense-script";
 import { AdSidebarRail } from "@/components/ads/ad-sidebar-rail";
 import { AdTopBanner } from "@/components/ads/ad-top-banner";
+import { YoutubeSubscribePopup } from "@/components/youtube-subscribe-popup";
 import { SiteFooter } from "./site-footer";
 import { SiteHeader } from "./site-header";
 
@@ -30,6 +31,7 @@ export function PageShell({
         aria-hidden
       />
       <div className="relative flex min-h-full flex-1 flex-col">
+        <YoutubeSubscribePopup />
         <SiteHeader />
         <div
           className={`relative flex flex-1 flex-col px-4 py-12 sm:px-6 ${center ? "items-center justify-center" : ""}`}

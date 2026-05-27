@@ -1,5 +1,9 @@
 import { dbQueryOne } from "@/lib/db/query";
-import { sendEmailSmtp } from "@/lib/notifications/email-smtp";
+import { sendAppEmail } from "@/lib/notifications/email-send";
+import {
+  templateDisputeChat,
+  templateDisputeTicket,
+} from "@/lib/notifications/email-templates";
 
 function siteBaseUrl(): string {
   return (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(
@@ -57,35 +61,7 @@ function resolveRecipient(
   if (authorIsB) {
     return { to: match.email_a, toLabel: match.label_a, authorIsA };
   }
-  // Si on ne reconnaît pas l’auteur (cas admin), on prévient les 2.
   return { to: null as string | null, toLabel: null as string | null, authorIsA };
-}
-
-async function sendDisputeEmailToOne(options: {
-  to: string;
-  subject: string;
-  text: string;
-}) {
-  const from =
-    process.env.DISPUTE_EMAIL_FROM ??
-    process.env.SMTP_FROM ??
-    "";
-
-  if (!from) return;
-  const to = options.to.trim();
-  if (!to) return;
-
-  const result = await sendEmailSmtp({
-    from,
-    to,
-    subject: options.subject,
-    text: options.text,
-  });
-
-  if (!result.ok) {
-    // eslint-disable-next-line no-console
-    console.warn("[mail] dispute email failed", result.error);
-  }
 }
 
 export async function notifyDisputeChatEmail(params: {
@@ -96,8 +72,7 @@ export async function notifyDisputeChatEmail(params: {
   const match = await getMatchParticipantsEmails(params.matchId);
   if (!match) return;
 
-  const base = siteBaseUrl();
-  const link = `${base}/play/match/${params.matchId}`;
+  const link = `${siteBaseUrl()}/play/match/${params.matchId}`;
   const cleanMsg = safeText(params.message, 900);
 
   const aLabel = match.label_a ?? match.display_a ?? "Joueur A";
@@ -106,14 +81,17 @@ export async function notifyDisputeChatEmail(params: {
 
   const recipient = resolveRecipient(match, params.authorId);
   const subject = "BloXKING — nouveau message de litige";
-  const text = `Tu as un nouveau message de litige.\n\nAuteur : ${authorLabel}\nMessage : ${cleanMsg}\n\nOuvrir le litige : ${link}`;
+  const tpl = templateDisputeChat({
+    authorLabel,
+    message: cleanMsg,
+    matchUrl: link,
+  });
 
   if (recipient?.to) {
-    await sendDisputeEmailToOne({ to: recipient.to, subject, text });
+    await sendAppEmail({ to: recipient.to, subject, text: tpl.text, html: tpl.html });
   } else {
-    // fallback (admin qui n’est pas participant)
-    await sendDisputeEmailToOne({ to: match.email_a, subject, text });
-    await sendDisputeEmailToOne({ to: match.email_b, subject, text });
+    await sendAppEmail({ to: match.email_a, subject, text: tpl.text, html: tpl.html });
+    await sendAppEmail({ to: match.email_b, subject, text: tpl.text, html: tpl.html });
   }
 }
 
@@ -125,8 +103,7 @@ export async function notifyDisputeTicketEmail(params: {
   const match = await getMatchParticipantsEmails(params.matchId);
   if (!match) return;
 
-  const base = siteBaseUrl();
-  const link = `${base}/play/match/${params.matchId}`;
+  const link = `${siteBaseUrl()}/play/match/${params.matchId}`;
   const cleanExplanation = safeText(params.explanation, 900);
 
   const aLabel = match.label_a ?? match.display_a ?? "Joueur A";
@@ -135,13 +112,16 @@ export async function notifyDisputeTicketEmail(params: {
 
   const recipient = resolveRecipient(match, params.authorId);
   const subject = "BloXKING — nouveau ticket de litige";
-  const text = `Un nouveau ticket de litige a été créé.\n\nAuteur : ${authorLabel}\nDétail : ${cleanExplanation}\n\nOuvrir le litige : ${link}`;
+  const tpl = templateDisputeTicket({
+    authorLabel,
+    explanation: cleanExplanation,
+    matchUrl: link,
+  });
 
   if (recipient?.to) {
-    await sendDisputeEmailToOne({ to: recipient.to, subject, text });
+    await sendAppEmail({ to: recipient.to, subject, text: tpl.text, html: tpl.html });
   } else {
-    await sendDisputeEmailToOne({ to: match.email_a, subject, text });
-    await sendDisputeEmailToOne({ to: match.email_b, subject, text });
+    await sendAppEmail({ to: match.email_a, subject, text: tpl.text, html: tpl.html });
+    await sendAppEmail({ to: match.email_b, subject, text: tpl.text, html: tpl.html });
   }
 }
-

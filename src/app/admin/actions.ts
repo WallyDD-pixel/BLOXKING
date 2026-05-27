@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth/admin";
 import { rpcJson } from "@/lib/db/rpc";
 import { sanitizeDisputeChatMessage } from "@/lib/dispute-evidence";
 import { notifyDisputeChatEmail } from "@/lib/notifications/dispute-notify";
+import { notifyMatchResultEmails } from "@/lib/notifications/match-result-notify";
 
 function rpcPayload(raw: Record<string, unknown>) {
   return raw;
@@ -55,6 +56,7 @@ export async function adminResolveMatch(
     }
     revalidateAdmin(matchId);
     revalidatePath(`/play/match/${matchId}`);
+    void notifyMatchResultEmails(matchId);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { SessionUser } from "@/lib/auth/session";
 import { FINAL_PRIZE_ROBUX, FINALIST_COUNT } from "@/lib/competition-copy";
+import { DiscordInviteLink } from "@/components/discord-invite-link";
 import { YoutubeChannelLink } from "@/components/youtube-channel-link";
 
 export function HomeHeroCta({ user }: { user: SessionUser | null }) {
@@ -63,6 +64,7 @@ export function HomeHeroCta({ user }: { user: SessionUser | null }) {
         >
           Voir le classement
         </Link>
+        <DiscordInviteLink />
         <YoutubeChannelLink />
       </div>
 
