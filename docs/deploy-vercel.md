@@ -38,7 +38,8 @@ Dans le projet Vercel : **Settings** → **Environment Variables**.
 | `SMTP_SECURE` | si e-mails | `false` avec le port 587, `true` avec le port 465 |
 | `SMTP_USER` | si e-mails | Adresse Gmail complète |
 | `SMTP_PASS` | si e-mails | **Mot de passe d’application** Google (16 caractères), pas le mot de passe du compte |
-| `SMTP_FROM` | si e-mails | **Même adresse** que `SMTP_USER` pour Gmail |
+| `SMTP_FROM` | si e-mails | **Même adresse** que `SMTP_USER` pour Gmail (ou vide) |
+| `DISPUTE_EMAIL_FROM` | éviter Gmail | Si défini avec une autre adresse que `SMTP_USER`, Gmail refuse l’envoi — laisser vide ou identique |
 
 Après déploiement : **Admin** → panneau → **Vérifier la config** / **Envoyer un e-mail test**.
 

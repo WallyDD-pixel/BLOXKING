@@ -2,6 +2,7 @@ import Link from "next/link";
 import { TableSearchBar } from "@/components/table-search-bar";
 import { listAdminDisputes } from "@/lib/admin/queries";
 import { matchStatusClass, matchStatusLabel } from "@/lib/admin/display";
+import { formatDateTimeFr } from "@/lib/format-datetime";
 import { searchBlob } from "@/lib/table-search";
 
 export default async function AdminDisputesPage() {
@@ -50,7 +51,7 @@ export default async function AdminDisputesPage() {
                     </p>
                     <p className="mt-1 text-xs text-zinc-500">
                       Match du{" "}
-                      {new Date(d.created_at).toLocaleString("fr-FR")}
+                      {formatDateTimeFr(d.created_at)}
                     </p>
                   </div>
                   <span
@@ -62,7 +63,7 @@ export default async function AdminDisputesPage() {
                 <p className="mt-2 text-sm text-zinc-400">
                   {d.ticket_count} ticket(s) · {d.chat_count} message(s) chat
                   {d.first_ticket_at
-                    ? ` · 1er ticket ${new Date(d.first_ticket_at).toLocaleString("fr-FR")}`
+                    ? ` · 1er ticket ${formatDateTimeFr(d.first_ticket_at)}`
                     : ""}
                 </p>
               </Link>

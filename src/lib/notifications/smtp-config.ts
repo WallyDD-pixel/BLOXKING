@@ -10,6 +10,15 @@ export type SmtpConfig = {
   from: string;
 };
 
+export type SmtpConfigDiagnostics = {
+  issues: string[];
+  warnings: string[];
+  effectiveFrom: string;
+  user: string;
+  disputeFrom: string;
+  smtpFrom: string;
+};
+
 function env(key: string): string {
   const raw = process.env[key];
   if (!raw) return "";
@@ -23,17 +32,48 @@ function env(key: string): string {
   return s;
 }
 
-export function smtpFromAddress(): string {
-  return env("DISPUTE_EMAIL_FROM") || env("SMTP_FROM");
+/** Extrait l’adresse e-mail d’un champ From (`nom <a@b.c>` ou `a@b.c`). */
+export function parseEmailAddress(raw: string): string {
+  const s = raw.trim();
+  if (!s) return "";
+  const angle = s.match(/<([^>]+)>/);
+  const addr = (angle ? angle[1] : s).trim();
+  return addr.toLowerCase();
 }
 
-export function getSmtpConfigIssues(): string[] {
+function isGmailHost(host: string): boolean {
+  const h = host.toLowerCase();
+  return h.includes("gmail") || h.includes("googlemail");
+}
+
+/**
+ * Adresse expéditeur réellement utilisée.
+ * Gmail impose que From = compte authentifié (SMTP_USER).
+ */
+export function smtpFromAddress(): string {
+  const user = env("SMTP_USER");
+  const host = env("SMTP_HOST");
+  const displayName = env("SMTP_FROM_NAME");
+
+  if (user && isGmailHost(host)) {
+    return displayName ? `${displayName} <${user}>` : user;
+  }
+
+  return env("DISPUTE_EMAIL_FROM") || env("SMTP_FROM") || user;
+}
+
+export function getSmtpConfigDiagnostics(): SmtpConfigDiagnostics {
   const issues: string[] = [];
+  const warnings: string[] = [];
   const host = env("SMTP_HOST");
   const portRaw = env("SMTP_PORT");
   const user = env("SMTP_USER");
   const pass = env("SMTP_PASS");
-  const from = smtpFromAddress();
+  const smtpFrom = env("SMTP_FROM");
+  const disputeFrom = env("DISPUTE_EMAIL_FROM");
+  const effectiveFrom = smtpFromAddress();
+  const fromEmail = parseEmailAddress(effectiveFrom);
+  const userEmail = parseEmailAddress(user);
 
   if (!host) issues.push("SMTP_HOST manquant.");
   else if (!host.includes(".") && host.toLowerCase() !== "localhost") {
@@ -53,15 +93,39 @@ export function getSmtpConfigIssues(): string[] {
   if (!user) issues.push("SMTP_USER manquant.");
   if (!pass) issues.push("SMTP_PASS manquant (mot de passe d'application Gmail).");
 
-  if (!from) {
-    issues.push("SMTP_FROM ou DISPUTE_EMAIL_FROM manquant.");
-  } else if (user && from.toLowerCase() !== user.toLowerCase()) {
+  if (!fromEmail) {
+    issues.push("SMTP_FROM ou SMTP_USER manquant (adresse expéditeur).");
+  }
+
+  if (user && isGmailHost(host)) {
+    if (disputeFrom && parseEmailAddress(disputeFrom) !== userEmail) {
+      warnings.push(
+        `DISPUTE_EMAIL_FROM="${disputeFrom}" ne peut pas être utilisé avec Gmail : l'expéditeur sera SMTP_USER (${user}). Supprime DISPUTE_EMAIL_FROM ou mets la même adresse.`,
+      );
+    }
+    if (smtpFrom && parseEmailAddress(smtpFrom) !== userEmail) {
+      warnings.push(
+        `SMTP_FROM="${smtpFrom}" est ignoré pour Gmail : l'expéditeur sera SMTP_USER (${user}).`,
+      );
+    }
+  } else if (user && fromEmail && fromEmail !== userEmail) {
     issues.push(
-      "SMTP_FROM doit être identique à SMTP_USER pour Gmail (ex. ton adresse @gmail.com).",
+      `L'expéditeur (${effectiveFrom}) doit correspondre à SMTP_USER (${user}) pour ce fournisseur.`,
     );
   }
 
-  return issues;
+  return {
+    issues,
+    warnings,
+    effectiveFrom,
+    user,
+    disputeFrom,
+    smtpFrom,
+  };
+}
+
+export function getSmtpConfigIssues(): string[] {
+  return getSmtpConfigDiagnostics().issues;
 }
 
 export function getSmtpConfig(): SmtpConfig | null {

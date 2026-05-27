@@ -38,6 +38,7 @@ import {
 } from "@/lib/dispute-evidence";
 import { uploadDisputeEvidenceClient } from "@/lib/upload-dispute-evidence-client";
 import { PVP_RECORDING_DISPUTE_HINT } from "@/lib/pvp-recording-copy";
+import { formatDateTimeFr } from "@/lib/format-datetime";
 import {
   MATCH_START_DEADLINE_MS,
   formatCountdownMs,
@@ -882,7 +883,7 @@ export function MatchArenaClient({
                   </p>
                   {disputeTickets.map((t) => {
                     const mine = t.opened_by === userId;
-                    const when = new Date(t.created_at).toLocaleString("fr-FR", {
+                    const when = formatDateTimeFr(t.created_at, {
                       dateStyle: "short",
                       timeStyle: "short",
                     });

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { listMatchHistory, type OngoingMatchRow } from "@/app/play/actions";
 import { getCurrentUser } from "@/lib/auth/session";
 import { TableSearchBar } from "@/components/table-search-bar";
+import { formatDateTimeFr } from "@/lib/format-datetime";
 import { searchBlob } from "@/lib/table-search";
 
 function opponentDisplayName(row: OngoingMatchRow, viewerId: string): string {
@@ -151,7 +152,7 @@ export default async function MesRencontresPage() {
             const score = consensusScore(row);
             const outcome = resultForViewer(row, user.id);
             const lpDelta = lpDeltaForViewer(row, user.id);
-            const when = new Date(row.created_at).toLocaleString("fr-FR", {
+            const when = formatDateTimeFr(row.created_at, {
               dateStyle: "medium",
               timeStyle: "short",
             });

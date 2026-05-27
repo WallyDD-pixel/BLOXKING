@@ -9,11 +9,12 @@ import {
   getPlayerPublicProfile,
   placementLabel,
 } from "@/lib/player-profile";
+import { formatDateFr } from "@/lib/format-datetime";
 import { isPlacementComplete } from "@/lib/ranked";
 
 function formatDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString("fr-FR", {
+    return formatDateFr(iso, {
       day: "numeric",
       month: "short",
       year: "numeric",

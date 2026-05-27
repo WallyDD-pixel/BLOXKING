@@ -5,6 +5,8 @@ import { useState } from "react";
 type Diag = {
   configured: boolean;
   issues: string[];
+  warnings?: string[];
+  effectiveFrom?: string;
   verify: { ok: true } | { ok: false; error: string } | null;
 };
 
@@ -97,6 +99,19 @@ export function AdminSmtpTest() {
           ) : (
             <p className="text-emerald-400/95">Variables SMTP présentes.</p>
           )}
+          {diag.effectiveFrom ? (
+            <p className="text-zinc-400">
+              Expéditeur utilisé :{" "}
+              <span className="font-mono text-zinc-200">{diag.effectiveFrom}</span>
+            </p>
+          ) : null}
+          {diag.warnings && diag.warnings.length > 0 ? (
+            <ul className="list-inside list-disc text-amber-300/90">
+              {diag.warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          ) : null}
           {diag.verify ? (
             diag.verify.ok ? (
               <p className="text-emerald-400/95">Connexion SMTP OK.</p>
@@ -127,6 +142,7 @@ SMTP_SECURE=false
 SMTP_USER=ton-compte@gmail.com
 SMTP_PASS=mot_de_passe_application_16_caracteres
 SMTP_FROM=ton-compte@gmail.com
+# Ne pas mettre une autre adresse dans DISPUTE_EMAIL_FROM (Gmail)
 NEXT_PUBLIC_SITE_URL=https://bloxking.vercel.app`}
         </pre>
       </details>

@@ -6,6 +6,7 @@ import {
   matchRequestCancellation,
   type MatchCancellationRequestRow,
 } from "@/app/play/actions";
+import { formatDateTimeFr } from "@/lib/format-datetime";
 
 type Props = {
   matchId: string;
@@ -86,7 +87,7 @@ export function MatchCancellationRequest({
           <p className="mt-2 whitespace-pre-wrap leading-relaxed">{myOpen.reason}</p>
           <p className="mt-2 text-xs text-amber-200/70">
             Envoyée le{" "}
-            {new Date(myOpen.created_at).toLocaleString("fr-FR")}. Tu peux
+            {formatDateTimeFr(myOpen.created_at)}. Tu peux
             modifier le texte ci-dessous pour mettre à jour ta demande.
           </p>
         </div>

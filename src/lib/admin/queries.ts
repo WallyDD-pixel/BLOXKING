@@ -58,6 +58,7 @@ export type AdminMatchRow = {
   claim_from_b_maps_b: number | null;
   ticket_count: number;
   cancel_request_count: number;
+  player_chat_count: number;
 };
 
 const ADMIN_MATCH_SELECT = `
@@ -73,7 +74,8 @@ const ADMIN_MATCH_SELECT = `
   m.claim_from_a_maps_a, m.claim_from_a_maps_b,
   m.claim_from_b_maps_a, m.claim_from_b_maps_b,
   coalesce(t.cnt, 0)::int as ticket_count,
-  coalesce(cr.cnt, 0)::int as cancel_request_count
+  coalesce(cr.cnt, 0)::int as cancel_request_count,
+  coalesce(ch.cnt, 0)::int as player_chat_count
 `;
 
 export async function listAdminMatches(options: {
@@ -101,6 +103,13 @@ export async function listAdminMatches(options: {
         where status = 'open'
         group by match_id
       ) cr on cr.match_id = m.id
+      left join (
+        select c.match_id, count(*)::int as cnt
+        from public.match_dispute_chat_messages c
+        join public.users u on u.id = c.author_id
+        where coalesce(u.is_admin, false) = false
+        group by c.match_id
+      ) ch on ch.match_id = m.id
       where m.status = $1
       order by m.created_at desc
       limit $2
@@ -126,6 +135,13 @@ export async function listAdminMatches(options: {
       where status = 'open'
       group by match_id
     ) cr on cr.match_id = m.id
+    left join (
+      select c.match_id, count(*)::int as cnt
+      from public.match_dispute_chat_messages c
+      join public.users u on u.id = c.author_id
+      where coalesce(u.is_admin, false) = false
+      group by c.match_id
+    ) ch on ch.match_id = m.id
     order by m.created_at desc
     limit $1
     `,
@@ -255,6 +271,13 @@ export async function getAdminMatchDetail(
       where status = 'open'
       group by match_id
     ) cr on cr.match_id = m.id
+    left join (
+      select c.match_id, count(*)::int as cnt
+      from public.match_dispute_chat_messages c
+      join public.users u on u.id = c.author_id
+      where coalesce(u.is_admin, false) = false
+      group by c.match_id
+    ) ch on ch.match_id = m.id
     where m.id = $1
     `,
     [matchId],

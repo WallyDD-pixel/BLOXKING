@@ -7,6 +7,7 @@ import {
 import { TableSearchBar } from "@/components/table-search-bar";
 import { getCurrentUser } from "@/lib/auth/session";
 import { dbQuery, dbQueryOne } from "@/lib/db/query";
+import { formatDateTimeFr } from "@/lib/format-datetime";
 import { searchBlob } from "@/lib/table-search";
 
 type Challenge = {
@@ -127,7 +128,7 @@ export default async function DefisPage() {
                         {c.creator_display_name ?? "Joueur"}
                       </p>
                       <p className="font-mono text-[0.65rem] text-zinc-500">
-                        {new Date(c.created_at).toLocaleString("fr-FR")}
+                        {formatDateTimeFr(c.created_at)}
                       </p>
                     </div>
                   </div>

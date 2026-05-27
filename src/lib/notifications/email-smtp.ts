@@ -1,6 +1,10 @@
 import nodemailer from "nodemailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
-import { getSmtpConfig, getSmtpConfigIssues } from "@/lib/notifications/smtp-config";
+import {
+  getSmtpConfig,
+  getSmtpConfigDiagnostics,
+  getSmtpConfigIssues,
+} from "@/lib/notifications/smtp-config";
 
 export type SmtpSendEmailInput = {
   from: string;
@@ -37,11 +41,15 @@ function createTransport() {
 export function getSmtpDiagnostics(): {
   configured: boolean;
   issues: string[];
+  warnings: string[];
+  effectiveFrom: string;
 } {
-  const issues = getSmtpConfigIssues();
+  const d = getSmtpConfigDiagnostics();
   return {
-    configured: issues.length === 0,
-    issues,
+    configured: d.issues.length === 0,
+    issues: d.issues,
+    warnings: d.warnings,
+    effectiveFrom: d.effectiveFrom,
   };
 }
 

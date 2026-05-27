@@ -50,7 +50,8 @@ export function AdminDisputeChatComposer({ matchId }: { matchId: string }) {
       </div>
       {error ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
       <p className="mt-2 text-xs text-zinc-600">
-        Le message est posté dans le chat litige avec ton compte admin.
+        Visible par les deux joueurs dans le chat du match (section « Messages » de
+        la salle PVP).
       </p>
     </div>
   );

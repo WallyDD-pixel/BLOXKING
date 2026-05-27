@@ -9,6 +9,7 @@ import {
 import { deriveAdminMatchProgress } from "@/lib/admin/match-progress";
 import { AdminMatchProgressBadge } from "@/components/admin/admin-match-progress";
 import { TableSearchBar } from "@/components/table-search-bar";
+import { formatDateTimeFr } from "@/lib/format-datetime";
 import { searchBlob } from "@/lib/table-search";
 
 const FILTERS = [
@@ -112,7 +113,7 @@ export default async function AdminMatchesPage({
                   )}
                 >
                   <td className="whitespace-nowrap px-4 py-3 text-zinc-400">
-                    {new Date(m.created_at).toLocaleString("fr-FR", {
+                    {formatDateTimeFr(m.created_at, {
                       dateStyle: "short",
                       timeStyle: "short",
                     })}
@@ -155,6 +156,11 @@ export default async function AdminMatchesPage({
                     {m.cancel_request_count > 0 ? (
                       <p className="mt-1 text-xs font-semibold text-red-400/90">
                         {m.cancel_request_count} demande(s) annulation
+                      </p>
+                    ) : null}
+                    {m.player_chat_count > 0 ? (
+                      <p className="mt-1 text-xs text-emerald-500/90">
+                        {m.player_chat_count} msg. joueurs
                       </p>
                     ) : null}
                   </td>

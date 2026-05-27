@@ -19,6 +19,8 @@ export async function GET() {
   return NextResponse.json({
     configured: diag.configured,
     issues: diag.issues,
+    warnings: diag.warnings,
+    effectiveFrom: diag.effectiveFrom,
     verify: verify
       ? verify.ok
         ? { ok: true }

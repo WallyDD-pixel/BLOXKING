@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import type { DisputeChatMessageRow } from "@/app/play/actions";
+import { formatDateTimeFr } from "@/lib/format-datetime";
 
 function ChatIcon({ className }: { className?: string }) {
   return (
@@ -143,10 +144,10 @@ export function MatchOpponentChatWidget({
               ) : (
                 messages.map((msg) => {
                   const mine = msg.author_id === userId;
-                  const when = new Date(msg.created_at).toLocaleString(
-                    "fr-FR",
-                    { dateStyle: "short", timeStyle: "short" },
-                  );
+                  const when = formatDateTimeFr(msg.created_at, {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  });
                   return (
                     <li
                       key={msg.id}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { TableSearchBar } from "@/components/table-search-bar";
 import { listAdminUsers } from "@/lib/admin/queries";
+import { formatDateFr } from "@/lib/format-datetime";
 import { searchBlob } from "@/lib/table-search";
 
 export default async function AdminUsersPage() {
@@ -68,7 +69,7 @@ export default async function AdminUsersPage() {
                 {u.matches_total} · {u.matches_wins} V
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-zinc-500">
-                {new Date(u.created_at).toLocaleDateString("fr-FR")}
+                {formatDateFr(u.created_at)}
               </td>
               <td className="px-4 py-3 text-right">
                 <Link

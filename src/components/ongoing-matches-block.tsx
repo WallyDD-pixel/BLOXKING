@@ -6,6 +6,7 @@ import { listOngoingMatches, type OngoingMatchRow } from "@/app/play/actions";
 import { TableSearchBar } from "@/components/table-search-bar";
 import { deriveOngoingMatchCardState } from "@/lib/match-list-state";
 import { isPlacementComplete, PLACEMENT_TOTAL } from "@/lib/ranked";
+import { formatDateTimeFr } from "@/lib/format-datetime";
 import { searchBlob } from "@/lib/table-search";
 
 function sourceLabel(source: string): string {
@@ -97,8 +98,7 @@ export function OngoingMatchesBlock({
               ? m.player_b_label ?? "Joueur B"
               : m.player_a_label ?? "Joueur A";
             const card = deriveOngoingMatchCardState(m);
-            const created = new Date(m.created_at);
-            const dateStr = created.toLocaleString("fr-FR", {
+            const dateStr = formatDateTimeFr(m.created_at, {
               dateStyle: "short",
               timeStyle: "short",
             });

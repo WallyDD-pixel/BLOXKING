@@ -19,6 +19,11 @@ import { disputeEvidencePublicUrl } from "@/lib/storage/dispute-evidence-url";
 import { DisputeEvidencePreview } from "@/components/match/dispute-evidence-preview";
 import { getCurrentUser } from "@/lib/auth/session";
 import { AdminDisputeChatComposer } from "@/components/admin/admin-dispute-chat-composer";
+import {
+  AdminMatchModerationChat,
+  AdminMatchPlayerChat,
+} from "@/components/admin/admin-match-chat-transcript";
+import { formatDateTimeFr } from "@/lib/format-datetime";
 
 export default async function AdminDisputeDetailPage({
   params,
@@ -91,7 +96,7 @@ export default async function AdminDisputeDetailPage({
           <div>
             <dt className="text-zinc-500">Créé le</dt>
             <dd className="text-zinc-200">
-              {new Date(match.created_at).toLocaleString("fr-FR")}
+              {formatDateTimeFr(match.created_at)}
             </dd>
           </div>
           <div>
@@ -147,7 +152,7 @@ export default async function AdminDisputeDetailPage({
               >
                 <p className="text-xs text-zinc-500">
                   {r.requester_label ?? r.requester_email} ·{" "}
-                  {new Date(r.created_at).toLocaleString("fr-FR")}
+                  {formatDateTimeFr(r.created_at)}
                 </p>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">
                   {r.reason}
@@ -169,7 +174,7 @@ export default async function AdminDisputeDetailPage({
               >
                 <p className="text-xs text-zinc-500">
                   {r.requester_label ?? r.requester_email} ·{" "}
-                  {new Date(r.created_at).toLocaleString("fr-FR")} · {r.status}
+                  {formatDateTimeFr(r.created_at)} · {r.status}
                 </p>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-400">
                   {r.reason}
@@ -179,6 +184,8 @@ export default async function AdminDisputeDetailPage({
           </ul>
         </section>
       ) : null}
+
+      <AdminMatchPlayerChat messages={chat} match={match} />
 
       <section>
         <h2 className="text-lg font-semibold text-zinc-100">Tickets litige</h2>
@@ -193,7 +200,7 @@ export default async function AdminDisputeDetailPage({
               >
                 <p className="text-xs text-zinc-500">
                   {t.opener_email} ·{" "}
-                  {new Date(t.created_at).toLocaleString("fr-FR")}
+                  {formatDateTimeFr(t.created_at)}
                 </p>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-300">
                   {t.body}
@@ -223,34 +230,11 @@ export default async function AdminDisputeDetailPage({
         )}
       </section>
 
-      <section>
-        <h2 className="text-lg font-semibold text-zinc-100">Chat litige</h2>
+      <AdminMatchModerationChat messages={chat} match={match}>
         <div className="mt-3">
           <AdminDisputeChatComposer matchId={match.id} />
         </div>
-        {chat.length === 0 ? (
-          <p className="mt-2 text-sm text-zinc-500">Aucun message.</p>
-        ) : (
-          <ul className="mt-3 max-h-80 space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-3">
-            {chat.map((c) => (
-              <li key={c.id} className="text-sm">
-                <span className="font-medium text-zinc-400">
-                  {c.author_is_admin
-                    ? `${process.env.ADMIN_CHAT_NAME ?? "Warren"} (Admin)`
-                    : c.author_roblox_username ??
-                      c.author_display_name ??
-                      c.author_email}
-                </span>
-                <span className="text-zinc-600">
-                  {" "}
-                  · {new Date(c.created_at).toLocaleTimeString("fr-FR")}
-                </span>
-                <p className="text-zinc-200">{c.body}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      </AdminMatchModerationChat>
     </div>
   );
 }
