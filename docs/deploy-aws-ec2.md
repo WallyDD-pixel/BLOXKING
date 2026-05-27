@@ -27,6 +27,16 @@ chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
 docker compose version
 ```
 
+### Sans domaine (publication sur l’IP)
+
+- Dans `.env.production` :  
+  `NEXT_PUBLIC_SITE_URL=http://<IP-PUBLIQUE>` (ex. `http://13.62.55.67`)
+- Pas de HTTPS Let’s Encrypt sur une IP seule : reste en HTTP.
+- Le fichier `infra/nginx/bloxking.conf` est prêt pour ça (`server_name _` + `default_server`).
+- **Security Group** : ouvre le port **80** (HTTP) depuis `0.0.0.0/0` pour le test publique.  
+  Garde **22** (SSH) pour toi si possible.
+- Ignore les sections **HTTPS** et **DNS** tant que tu n’as pas de nom de domaine.
+
 ## 2) Variables d'environnement prod
 
 Dans le repo EC2:
@@ -39,7 +49,7 @@ cp .env.example .env.production
 Adapter au minimum:
 - `DATABASE_URL` (base actuelle)
 - `DATABASE_SSL=false` (si Postgres local/tunnel, sinon `true` si TLS activé)
-- `NEXT_PUBLIC_SITE_URL=https://bloxking.fr`
+- `NEXT_PUBLIC_SITE_URL` : `http://<IP-PUBLIQUE-EC2>` sans domaine, ou `https://ton-domaine` plus tard
 - SMTP/YouTube si utilisés
 - `DISPUTE_EVIDENCE_DIR=/var/bloxking/dispute-evidence`
 

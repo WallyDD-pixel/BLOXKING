@@ -873,6 +873,39 @@ begin
 end;
 $$;
 
+-- Bonus d'upset : battre un joueur mieux classé (surtout top 10) rapporte plus.
+create or replace function public.elo_upset_bonus(
+  p_winner_elo int,
+  p_loser_elo int,
+  p_loser_rank int
+)
+returns numeric
+language plpgsql
+immutable
+as $$
+declare
+  rank_bonus numeric := 0;
+  gap_bonus numeric := 0;
+  gap int;
+begin
+  if p_winner_elo >= p_loser_elo then
+    return 1.0;
+  end if;
+
+  gap := least(600, greatest(0, p_loser_elo - p_winner_elo));
+
+  rank_bonus := case
+    when p_loser_rank <= 10 then 0.20
+    when p_loser_rank <= 25 then 0.12
+    when p_loser_rank <= 50 then 0.06
+    else 0
+  end;
+
+  gap_bonus := (gap::numeric / 600.0) * 0.20;
+  return least(1.35, 1.0 + rank_bonus + gap_bonus);
+end;
+$$;
+
 create or replace function public.apply_elo_after_match_confirm(p_match_id uuid)
 returns void
 language plpgsql
@@ -898,6 +931,10 @@ declare
   sa numeric;
   sb numeric;
   a_wins boolean;
+  rank_a int;
+  rank_b int;
+  bonus_a numeric := 1.0;
+  bonus_b numeric := 1.0;
   dra int;
   drb int;
 begin
@@ -933,7 +970,20 @@ begin
   ra0 := ra;
   rb0 := rb;
 
+  select (count(*) + 1)::int into rank_a
+  from public.player_ranked_stats
+  where elo > ra0;
+  select (count(*) + 1)::int into rank_b
+  from public.player_ranked_stats
+  where elo > rb0;
+
   a_wins := ma > mb;
+  if a_wins then
+    bonus_a := public.elo_upset_bonus(ra0, rb0, rank_b);
+  else
+    bonus_b := public.elo_upset_bonus(rb0, ra0, rank_a);
+  end if;
+
   sa := case when a_wins then 1.0 else 0.0 end;
   sb := 1.0 - sa;
 
@@ -943,8 +993,8 @@ begin
   ka := case when pa_pl < 5 then 40 else 20 end;
   kb := case when pb_pl < 5 then 40 else 20 end;
 
-  dra := round(ka * (sa - ea))::int;
-  drb := round(kb * (sb - eb))::int;
+  dra := round(ka * (sa - ea) * bonus_a)::int;
+  drb := round(kb * (sb - eb) * bonus_b)::int;
 
   ra := greatest(100, least(4000, ra + dra));
   rb := greatest(100, least(4000, rb + drb));
@@ -1059,6 +1109,10 @@ declare
   sa numeric;
   sb numeric;
   a_wins boolean;
+  rank_a int;
+  rank_b int;
+  bonus_a numeric := 1.0;
+  bonus_b numeric := 1.0;
   dra int;
   drb int;
   ma int;
@@ -1093,7 +1147,22 @@ begin
     ra0 := ra;
     rb0 := rb;
 
+    select (count(*) + 1)::int into rank_a
+    from _elo_sim
+    where elo > ra0;
+    select (count(*) + 1)::int into rank_b
+    from _elo_sim
+    where elo > rb0;
+
+    bonus_a := 1.0;
+    bonus_b := 1.0;
     a_wins := ma > mb;
+    if a_wins then
+      bonus_a := public.elo_upset_bonus(ra0, rb0, rank_b);
+    else
+      bonus_b := public.elo_upset_bonus(rb0, ra0, rank_a);
+    end if;
+
     sa := case when a_wins then 1.0 else 0.0 end;
     sb := 1.0 - sa;
 
@@ -1103,8 +1172,8 @@ begin
     ka := case when pa_pl < 5 then 40 else 20 end;
     kb := case when pb_pl < 5 then 40 else 20 end;
 
-    dra := round(ka * (sa - ea))::int;
-    drb := round(kb * (sb - eb))::int;
+    dra := round(ka * (sa - ea) * bonus_a)::int;
+    drb := round(kb * (sb - eb) * bonus_b)::int;
 
     ra := greatest(100, least(4000, ra + dra));
     rb := greatest(100, least(4000, rb + drb));
