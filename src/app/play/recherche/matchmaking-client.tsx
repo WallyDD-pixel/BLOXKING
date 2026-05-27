@@ -406,7 +406,7 @@ export function MatchmakingClient({
                 <span>Initialiser la recherche</span>
               </button>
               <p className="mx-auto mt-6 max-w-md font-mono text-xs uppercase tracking-wider text-zinc-500">
-                Connexion au pool mondial · jumelage automatique 1v1
+                Pool mondial · jumelage par ELO (placement et classés)
               </p>
             </>
           )}

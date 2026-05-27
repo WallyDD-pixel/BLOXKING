@@ -343,6 +343,14 @@ $$;
 
 
 
+create or replace function public.matchmaking_placement_uncertainty(p_pl int)
+returns int
+language sql
+immutable
+as $$
+  select greatest(0, 5 - least(greatest(p_pl, 0), 5)) * 45;
+$$;
+
 drop function if exists public.join_ranked_queue();
 drop function if exists public.join_ranked_queue(jsonb);
 
@@ -449,12 +457,19 @@ begin
   from public.match_queue mq
   where mq.user_id <> uid
     and not public.user_has_open_ranked_match(mq.user_id)
-    and abs(mq.elo_snapshot - v_my_elo) <= v_span
-    and (
-      (v_my_pl < 5 and mq.placement_snapshot < 5)
-      or (v_my_pl >= 5 and mq.placement_snapshot >= 5)
+    and abs(mq.elo_snapshot - v_my_elo) <= (
+      v_span
+      + public.matchmaking_placement_uncertainty(v_my_pl)
+      + public.matchmaking_placement_uncertainty(mq.placement_snapshot)
     )
-  order by mq.first_queued_at asc, mq.user_id asc
+  order by
+    abs(mq.elo_snapshot - v_my_elo)
+    + case
+        when (v_my_pl >= 5) <> (mq.placement_snapshot >= 5) then 55
+        else 0
+      end,
+    mq.first_queued_at asc,
+    mq.user_id asc
   limit 1
   for update skip locked;
 

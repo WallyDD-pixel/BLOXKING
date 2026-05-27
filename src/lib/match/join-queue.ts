@@ -1,5 +1,9 @@
 import { dbQuery, dbQueryOne } from "@/lib/db/query";
 import { expireStaleMatchesIfNeeded } from "@/lib/match/expire-stale-matches";
+import {
+  matchmakingBaseEloSpan,
+  pickBestQueuePartner,
+} from "@/lib/match/matchmaking-pairing";
 import { mapMatchRpcError } from "@/lib/match-rpc-errors";
 
 export type JoinQueueResult =
@@ -120,7 +124,7 @@ export async function joinRankedQueue(uid: string): Promise<JoinQueueResult> {
 
   const firstMs = new Date(String(myRow.first_queued_at)).getTime();
   const waitSec = Math.max(0, (Date.now() - firstMs) / 1000);
-  const span = Math.min(800, 50 + Math.floor(waitSec / 15) * 25);
+  const span = matchmakingBaseEloSpan(waitSec);
   const myEloSnap = Number(myRow.elo_snapshot);
   const myPlSnap = Number(myRow.placement_snapshot);
 
@@ -128,9 +132,10 @@ export async function joinRankedQueue(uid: string): Promise<JoinQueueResult> {
     user_id: string;
     elo_snapshot: number;
     placement_snapshot: number;
+    first_queued_at: string;
   }>(
     `
-    select user_id, elo_snapshot, placement_snapshot
+    select user_id, elo_snapshot, placement_snapshot, first_queued_at
     from public.match_queue
     where user_id <> $1
     order by first_queued_at asc
@@ -139,20 +144,22 @@ export async function joinRankedQueue(uid: string): Promise<JoinQueueResult> {
     [uid],
   );
 
-  let partner: string | null = null;
+  const eligible: typeof candidates = [];
   for (const row of candidates) {
     const pid = String(row.user_id);
     if ((await countOpenMatchesForUser(pid)) > 0) {
       await dbQuery(`delete from public.match_queue where user_id = $1`, [pid]);
       continue;
     }
-    const oppElo = Number(row.elo_snapshot);
-    const oppPl = Number(row.placement_snapshot);
-    if (Math.abs(oppElo - myEloSnap) > span) continue;
-    if (!((myPlSnap < 5 && oppPl < 5) || (myPlSnap >= 5 && oppPl >= 5))) continue;
-    partner = pid;
-    break;
+    eligible.push(row);
   }
+
+  const partner = pickBestQueuePartner(
+    myEloSnap,
+    myPlSnap,
+    span,
+    eligible,
+  );
 
   if (!partner) return { ok: true, matched: false };
 
