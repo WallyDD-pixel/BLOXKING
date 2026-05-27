@@ -34,7 +34,9 @@ for f in "${MIGRATIONS[@]}"; do
   cp "$src" "$dest"
   chmod 644 "$dest"
   echo ">>> db/$f"
-  sudo -u postgres psql -d "$DB" -f "$dest"
+  # psql tente de cd vers le cwd courant : lancer depuis /tmp évite
+  # « could not change directory to /home/ec2-user/... Permission denied »
+  (cd /tmp && sudo -u postgres psql -d "$DB" -f "$dest")
   echo ""
 done
 

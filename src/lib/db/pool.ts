@@ -11,12 +11,26 @@ function mustEnv(name: string): string {
   return v;
 }
 
+function poolSslOption(connectionString: string) {
+  if (process.env.DATABASE_SSL !== "true") return undefined;
+  try {
+    const url = new URL(connectionString.replace(/^postgresql:/i, "postgres:"));
+    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+      return undefined;
+    }
+  } catch {
+    /* garde SSL si l’URL est illisible */
+  }
+  return { rejectUnauthorized: false } as const;
+}
+
 export function getPool(): Pool {
   // En dev, Next recharge souvent les modules: on garde un Pool global.
   if (!globalThis.__bloxking_pg_pool) {
+    const connectionString = mustEnv("DATABASE_URL");
     globalThis.__bloxking_pg_pool = new Pool({
-      connectionString: mustEnv("DATABASE_URL"),
-      ssl: process.env.DATABASE_SSL === "true" ? { rejectUnauthorized: false } : undefined,
+      connectionString,
+      ssl: poolSslOption(connectionString),
     });
   }
   return globalThis.__bloxking_pg_pool;

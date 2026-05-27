@@ -28,6 +28,7 @@ export default async function ClassementPage() {
     email: string;
   }> = [];
   let showError = false;
+  let errorDetail: string | null = null;
 
   try {
     list = await dbQuery(
@@ -45,8 +46,9 @@ export default async function ClassementPage() {
       limit 50
       `,
     );
-  } catch {
+  } catch (e) {
     showError = true;
+    errorDetail = e instanceof Error ? e.message : String(e);
   }
 
   return (
@@ -91,11 +93,33 @@ export default async function ClassementPage() {
         <ContentCard className="mt-8">
           {showError ? (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/95">
-              Impossible de charger le classement. Exécute{" "}
-              <code className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-xs">
-                db/01_ranked.sql
-              </code>{" "}
-              sur PostgreSQL.
+              Impossible de charger le classement.
+              {errorDetail?.includes("does not exist") ||
+              errorDetail?.includes("n'existe pas") ? (
+                <>
+                  {" "}
+                  Exécute{" "}
+                  <code className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-xs">
+                    db/01_ranked.sql
+                  </code>{" "}
+                  sur PostgreSQL.
+                </>
+              ) : errorDetail ? (
+                <span className="mt-2 block text-amber-200/90">{errorDetail}</span>
+              ) : (
+                <>
+                  {" "}
+                  Vérifie la connexion PostgreSQL (
+                  <code className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-xs">
+                    DATABASE_URL
+                  </code>
+                  , tunnel SSH,{" "}
+                  <code className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-xs">
+                    DATABASE_SSL=false
+                  </code>{" "}
+                  en local).
+                </>
+              )}
             </div>
           ) : list.length === 0 ? (
             <div className="flex items-start gap-4">
