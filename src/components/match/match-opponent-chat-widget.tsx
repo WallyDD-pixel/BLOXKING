@@ -48,8 +48,10 @@ export function MatchOpponentChatWidget({
 }) {
   const [open, setOpen] = useState(false);
   const [lastReadCount, setLastReadCount] = useState(0);
+  const [flashIncoming, setFlashIncoming] = useState(false);
   const listRef = useRef<HTMLUListElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const prevUnreadRef = useRef(0);
 
   const unreadCount = useMemo(() => {
     if (open) return 0;
@@ -57,9 +59,17 @@ export function MatchOpponentChatWidget({
       .length;
   }, [open, messages, lastReadCount, userId]);
 
+  const lastOpponentMessage = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].author_id !== userId) return messages[i];
+    }
+    return null;
+  }, [messages, userId]);
+
   useEffect(() => {
     if (open) {
       setLastReadCount(messages.length);
+      setFlashIncoming(false);
       const t = setTimeout(() => textareaRef.current?.focus(), 80);
       return () => clearTimeout(t);
     }
@@ -69,6 +79,17 @@ export function MatchOpponentChatWidget({
     if (!open || !listRef.current) return;
     listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [open, messages]);
+
+  useEffect(() => {
+    if (open) return;
+    if (unreadCount > prevUnreadRef.current) {
+      setFlashIncoming(true);
+      const t = setTimeout(() => setFlashIncoming(false), 8000);
+      prevUnreadRef.current = unreadCount;
+      return () => clearTimeout(t);
+    }
+    prevUnreadRef.current = unreadCount;
+  }, [unreadCount, open]);
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -89,6 +110,8 @@ export function MatchOpponentChatWidget({
     onDraftChange("");
   }
 
+  const hasUnread = unreadCount > 0;
+
   return (
     <>
       {open ? (
@@ -105,7 +128,7 @@ export function MatchOpponentChatWidget({
             onClick={close}
           />
           <div
-            className="absolute bottom-[5.25rem] right-3 flex w-[min(calc(100vw-1.5rem),22rem)] flex-col overflow-hidden rounded-2xl border border-emerald-500/35 bg-zinc-950 shadow-[0_12px_48px_rgba(0,0,0,0.55),0_0_0_1px_rgba(16,185,129,0.15)] sm:right-6 sm:w-[24rem]"
+            className="absolute bottom-[6.5rem] right-3 flex w-[min(calc(100vw-1.5rem),22rem)] flex-col overflow-hidden rounded-2xl border border-emerald-500/35 bg-zinc-950 shadow-[0_12px_48px_rgba(0,0,0,0.55),0_0_0_1px_rgba(16,185,129,0.15)] sm:right-6 sm:w-[24rem]"
             style={{ maxHeight: "min(70vh, 28rem)" }}
           >
             <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-gradient-to-r from-emerald-950/50 to-zinc-950 px-4 py-3">
@@ -154,7 +177,7 @@ export function MatchOpponentChatWidget({
                       className={`max-w-[92%] rounded-xl border px-3 py-2 text-sm ${
                         mine
                           ? "ml-auto border-emerald-500/30 bg-emerald-950/40 text-zinc-100"
-                          : "mr-auto border-white/10 bg-zinc-900/80 text-zinc-200"
+                          : "mr-auto border-amber-500/35 bg-amber-500/15 text-zinc-100 ring-1 ring-amber-400/20"
                       }`}
                     >
                       <p className="font-mono text-[0.5rem] text-zinc-500">
@@ -206,22 +229,54 @@ export function MatchOpponentChatWidget({
         </div>
       ) : null}
 
+      {!open && hasUnread && lastOpponentMessage ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="fixed bottom-[5.5rem] right-3 z-[195] max-w-[min(calc(100vw-5.5rem),18rem)] rounded-xl border border-amber-400/50 bg-gradient-to-r from-amber-500/25 to-amber-600/15 px-4 py-3 text-left shadow-[0_8px_32px_rgba(245,158,11,0.35)] ring-2 ring-amber-400/40 sm:right-6"
+        >
+          <p className="font-mono text-[0.6rem] font-semibold uppercase tracking-wider text-amber-200">
+            Nouveau message
+          </p>
+          <p className="mt-1 line-clamp-2 text-sm text-zinc-100">
+            {lastOpponentMessage.body}
+          </p>
+          <p className="mt-2 text-xs font-medium text-amber-300/95">
+            Appuyer pour ouvrir →
+          </p>
+        </button>
+      ) : null}
+
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-5 right-4 z-[190] flex h-14 w-14 items-center justify-center rounded-full border border-emerald-400/45 bg-gradient-to-br from-emerald-500/90 to-emerald-700/95 text-white shadow-[0_4px_24px_rgba(16,185,129,0.35)] transition-transform hover:scale-105 active:scale-95 sm:bottom-6 sm:right-6 sm:h-[3.75rem] sm:w-[3.75rem]"
+        className={`fixed bottom-5 right-4 z-[190] flex items-center justify-center rounded-full text-white transition-transform hover:scale-105 active:scale-95 sm:bottom-6 sm:right-6 ${
+          hasUnread
+            ? "h-[4.25rem] w-[4.25rem] border-2 border-amber-300/80 bg-gradient-to-br from-emerald-400 to-emerald-700 shadow-[0_0_0_4px_rgba(245,158,11,0.45),0_8px_40px_rgba(16,185,129,0.55)]"
+            : "h-14 w-14 border border-emerald-400/45 bg-gradient-to-br from-emerald-500/90 to-emerald-700/95 shadow-[0_4px_24px_rgba(16,185,129,0.35)]"
+        } ${flashIncoming ? "animate-pulse" : ""}`}
         aria-label={
-          unreadCount > 0
+          hasUnread
             ? `Ouvrir la conversation (${unreadCount} nouveau${unreadCount > 1 ? "x" : ""})`
             : "Ouvrir la conversation avec l'adversaire"
         }
       >
-        <ChatIcon className="h-7 w-7" />
-        {unreadCount > 0 ? (
-          <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full border-2 border-zinc-950 bg-amber-500 px-1 font-mono text-[0.65rem] font-bold text-zinc-950">
+        {hasUnread ? (
+          <span
+            className="pointer-events-none absolute inset-0 rounded-full bg-amber-400/30 animate-ping"
+            aria-hidden
+          />
+        ) : null}
+        <ChatIcon className={hasUnread ? "relative h-8 w-8" : "relative h-7 w-7"} />
+        {hasUnread ? (
+          <span className="absolute -right-1 -top-1 flex h-7 min-w-[1.75rem] items-center justify-center rounded-full border-[3px] border-zinc-950 bg-amber-400 px-1.5 font-mono text-xs font-bold text-zinc-950 shadow-lg shadow-amber-900/50">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
-        ) : null}
+        ) : (
+          <span className="absolute -bottom-1 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-white/15 bg-zinc-950/95 px-2 py-0.5 font-mono text-[0.55rem] uppercase tracking-wider text-emerald-200/90 sm:block">
+            Messages
+          </span>
+        )}
       </button>
     </>
   );

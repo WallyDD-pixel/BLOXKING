@@ -6,8 +6,12 @@ import { TournamentHeroBanner } from "@/components/tournament-hero-banner";
 import { PageShell } from "@/components/page-shell";
 import { YoutubeLiveBadge } from "@/components/youtube-live-badge";
 import { getCurrentUser } from "@/lib/auth/session";
-import { dbQuery } from "@/lib/db/query";
 import { playerDisplayName } from "@/lib/player-display-name";
+import {
+  formatMapKda,
+  formatWinRate,
+  getLeaderboardRows,
+} from "@/lib/player-stats";
 import {
   FINAL_PRIZE_ROBUX,
   FINALIST_COUNT,
@@ -19,33 +23,12 @@ import { searchBlob } from "@/lib/table-search";
 export default async function ClassementPage() {
   const user = await getCurrentUser();
 
-  let list: Array<{
-    user_id: string;
-    elo: number;
-    placement_matches_played: number;
-    roblox_username: string | null;
-    display_name: string | null;
-    email: string;
-  }> = [];
+  let list: Awaited<ReturnType<typeof getLeaderboardRows>> = [];
   let showError = false;
   let errorDetail: string | null = null;
 
   try {
-    list = await dbQuery(
-      `
-      select
-        s.user_id,
-        s.elo,
-        s.placement_matches_played,
-        u.roblox_username,
-        u.display_name,
-        u.email
-      from public.player_ranked_stats s
-      join public.users u on u.id = s.user_id
-      order by s.elo desc
-      limit 50
-      `,
-    );
+    list = await getLeaderboardRows(50);
   } catch (e) {
     showError = true;
     errorDetail = e instanceof Error ? e.message : String(e);
@@ -53,7 +36,7 @@ export default async function ClassementPage() {
 
   return (
     <PageShell>
-      <div className="mx-auto w-full max-w-3xl">
+      <div className="mx-auto w-full max-w-5xl">
         <BackLink />
         <div className="mt-6">
           <TournamentHeroBanner variant="compact" />
@@ -85,8 +68,9 @@ export default async function ClassementPage() {
           </p>
           <p className="mt-2 text-sm leading-relaxed text-zinc-400">
             Les lignes surlignées correspondent aux places qualificatives. Continue
-            à enchaîner les duels 1v1 validés pour sécuriser ta position avant la
-            clôture de la saison.
+          à enchaîner les duels 1v1 validés pour sécuriser ta position avant la
+          clôture de la saison. Winrate et KDA sont calculés sur les matchs
+          confirmés (KDA = ratio manches gagnées / perdues).
           </p>
         </div>
 
@@ -157,12 +141,16 @@ export default async function ClassementPage() {
                 placeholder="Rechercher un joueur…"
               />
               <div id="classement-table" className="overflow-x-auto">
-              <table className="w-full min-w-[320px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[520px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-white/10 font-mono text-[0.6rem] uppercase tracking-wider text-zinc-500">
                     <th className="pb-3 pr-4">#</th>
                     <th className="pb-3 pr-4">Joueur</th>
                     <th className="pb-3 pr-4">ELO</th>
+                    <th className="pb-3 pr-4">Winrate</th>
+                    <th className="pb-3 pr-4" title="Manches gagnées / perdues">
+                      KDA
+                    </th>
                     <th className="pb-3">Placement</th>
                   </tr>
                 </thead>
@@ -172,6 +160,8 @@ export default async function ClassementPage() {
                     const rank = i + 1;
                     const isFinalistZone = rank <= FINALIST_COUNT;
                     const name = playerDisplayName(row);
+                    const winRate = formatWinRate(row.wins, row.losses);
+                    const kda = formatMapKda(row.maps_won, row.maps_lost);
                     return (
                       <tr
                         key={row.user_id}
@@ -182,6 +172,12 @@ export default async function ClassementPage() {
                           row.roblox_username,
                           row.display_name,
                           row.elo,
+                          winRate,
+                          kda,
+                          row.wins,
+                          row.losses,
+                          row.maps_won,
+                          row.maps_lost,
                           row.placement_matches_played,
                         )}
                         className={`border-b border-white/5 font-mono text-zinc-200 ${
@@ -230,6 +226,15 @@ export default async function ClassementPage() {
                         </td>
                         <td className="py-3 pr-4 tabular-nums text-amber-200/95">
                           {row.elo}
+                        </td>
+                        <td className="py-3 pr-4 tabular-nums text-zinc-200">
+                          {winRate}
+                        </td>
+                        <td
+                          className="py-3 pr-4 tabular-nums text-emerald-200/90"
+                          title={`${row.maps_won} manches gagnées · ${row.maps_lost} perdues`}
+                        >
+                          {kda}
                         </td>
                         <td className="py-3 text-zinc-400">
                           {Math.min(row.placement_matches_played, PLACEMENT_TOTAL)}/
