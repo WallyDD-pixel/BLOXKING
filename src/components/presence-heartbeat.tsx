@@ -10,17 +10,20 @@ export function PresenceHeartbeat() {
 
   useEffect(() => {
     let cancelled = false;
+    let unauthorized = false;
 
     async function ping(path: string) {
       if (cancelled) return;
+      if (unauthorized) return;
       if (document.visibilityState === "hidden") return;
       try {
-        await fetch("/api/presence/heartbeat", {
+        const res = await fetch("/api/presence/heartbeat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ path }),
           keepalive: true,
         });
+        if (res.status === 401) unauthorized = true;
       } catch {
         /* réseau / hors ligne */
       }

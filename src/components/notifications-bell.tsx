@@ -12,9 +12,16 @@ export function NotificationsBell({ className }: Props) {
 
   useEffect(() => {
     let alive = true;
+    let unauthorized = false;
     const load = async () => {
+      if (unauthorized) return;
       try {
         const res = await fetch("/api/notifications/unread-count", { cache: "no-store" });
+        if (res.status === 401) {
+          unauthorized = true;
+          if (alive) setCount(0);
+          return;
+        }
         if (!res.ok) return;
         const data = (await res.json()) as { count?: number };
         if (alive) setCount(Number(data.count ?? 0));

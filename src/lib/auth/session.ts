@@ -12,6 +12,15 @@ export type SessionUser = {
   display_name: string | null;
 };
 
+function cookieSecureFlag(): boolean {
+  const explicit = process.env.SESSION_COOKIE_SECURE?.trim().toLowerCase();
+  if (explicit === "true") return true;
+  if (explicit === "false") return false;
+  if (process.env.NODE_ENV !== "production") return false;
+  const site = process.env.NEXT_PUBLIC_SITE_URL?.trim().toLowerCase() ?? "";
+  return site.startsWith("https://");
+}
+
 function newToken(): string {
   return randomBytes(32).toString("hex");
 }
@@ -66,7 +75,7 @@ export async function createSession(userId: string): Promise<void> {
   store.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: cookieSecureFlag(),
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
   });
@@ -83,7 +92,7 @@ export async function destroySession(): Promise<void> {
   store.set(SESSION_COOKIE, "", {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: cookieSecureFlag(),
     path: "/",
     maxAge: 0,
   });

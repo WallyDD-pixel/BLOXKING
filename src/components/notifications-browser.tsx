@@ -17,9 +17,15 @@ export function NotificationsBrowser() {
     if (typeof window === "undefined" || !("Notification" in window)) return;
 
     let alive = true;
+    let unauthorized = false;
     const load = async () => {
+      if (unauthorized) return;
       try {
         const res = await fetch("/api/notifications?limit=15", { cache: "no-store" });
+        if (res.status === 401) {
+          unauthorized = true;
+          return;
+        }
         if (!res.ok) return;
         const data = (await res.json()) as { notifications?: NotificationItem[] };
         if (!alive) return;
