@@ -39,7 +39,7 @@ import { PVP_RECORDING_DISPUTE_HINT } from "@/lib/pvp-recording-copy";
 import {
   formatCountdownMs,
   matchStartDeadlineMs,
-} from "@/lib/match/expire-stale-matches";
+} from "@/lib/match/match-start-deadline";
 
 export type MatchArenaRow = {
   id: string;
