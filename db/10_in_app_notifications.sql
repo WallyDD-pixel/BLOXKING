@@ -27,3 +27,5 @@ create index if not exists idx_user_notifications_user_created
 
 create index if not exists idx_user_notifications_user_unread
   on public.user_notifications (user_id, read_at, created_at desc);
+
+grant select, insert, update, delete on public.user_notifications to bloxking;

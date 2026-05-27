@@ -24,6 +24,12 @@ function poolSslOption(connectionString: string) {
   return { rejectUnauthorized: false } as const;
 }
 
+function poolMaxConnections(): number {
+  const raw = Number(process.env.DATABASE_POOL_MAX ?? "12");
+  if (!Number.isFinite(raw)) return 12;
+  return Math.min(Math.max(Math.trunc(raw), 2), 30);
+}
+
 export function getPool(): Pool {
   // En dev, Next recharge souvent les modules: on garde un Pool global.
   if (!globalThis.__bloxking_pg_pool) {
@@ -31,6 +37,9 @@ export function getPool(): Pool {
     globalThis.__bloxking_pg_pool = new Pool({
       connectionString,
       ssl: poolSslOption(connectionString),
+      max: poolMaxConnections(),
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 5_000,
     });
   }
   return globalThis.__bloxking_pg_pool;

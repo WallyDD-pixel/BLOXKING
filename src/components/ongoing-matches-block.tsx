@@ -8,6 +8,7 @@ import { deriveOngoingMatchCardState } from "@/lib/match-list-state";
 import { isPlacementComplete, PLACEMENT_TOTAL } from "@/lib/ranked";
 import { formatDateTimeFr } from "@/lib/format-datetime";
 import { searchBlob } from "@/lib/table-search";
+import { ONGOING_MATCHES_POLL_MS } from "@/lib/polling/constants";
 
 function sourceLabel(source: string): string {
   return source === "queue" ? "Matchmaking" : "Ancien défi";
@@ -31,10 +32,11 @@ export function OngoingMatchesBlock({
 
   useEffect(() => {
     const tick = async () => {
+      if (document.visibilityState === "hidden") return;
       const { rows: next } = await listOngoingMatches();
       setRows(next);
     };
-    const id = setInterval(() => void tick(), 14_000);
+    const id = setInterval(() => void tick(), ONGOING_MATCHES_POLL_MS);
     return () => clearInterval(id);
   }, []);
 

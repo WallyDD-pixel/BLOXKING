@@ -20,6 +20,7 @@ MIGRATIONS=(
   "09_user_presence.sql"
   "10_in_app_notifications.sql"
   "11_elo_upset_bonus.sql"
+  "12_grants_user_notifications.sql"
 )
 
 echo "Repo: $REPO_ROOT"

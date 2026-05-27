@@ -18,6 +18,10 @@ import {
   readMatchmakingSearch,
   setMatchmakingSearchActive,
 } from "@/lib/matchmaking-search-storage";
+import {
+  MATCHMAKING_POLL_MS,
+  ONGOING_MATCHES_POLL_MS,
+} from "@/lib/polling/constants";
 
 type Phase = "idle" | "searching" | "matched";
 
@@ -234,10 +238,11 @@ export function MatchmakingClient({
 
   useEffect(() => {
     const id = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
       void listOngoingMatches().then(({ rows }) => {
         setBlockNewScan(rows.length > 0);
       });
-    }, 12_000);
+    }, ONGOING_MATCHES_POLL_MS);
     return () => clearInterval(id);
   }, []);
 
@@ -264,7 +269,7 @@ export function MatchmakingClient({
     stopPolling();
     const id = setInterval(() => {
       void pollFnRef.current();
-    }, 2000);
+    }, MATCHMAKING_POLL_MS);
     pollRef.current = id;
     return () => {
       clearInterval(id);
@@ -346,7 +351,7 @@ export function MatchmakingClient({
     setMatchmakingSearchActive(userId, new Date().toISOString());
     pollRef.current = setInterval(() => {
       void pollFnRef.current();
-    }, 2000);
+    }, MATCHMAKING_POLL_MS);
   }
 
   async function handleLeave() {

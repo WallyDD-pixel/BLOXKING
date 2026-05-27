@@ -25,10 +25,22 @@ function newToken(): string {
   return randomBytes(32).toString("hex");
 }
 
+const SESSION_CACHE_TTL_MS = 30_000;
+const sessionCache = new Map<string, { user: SessionUser; until: number }>();
+
+export function invalidateSessionCache(token: string) {
+  sessionCache.delete(token);
+}
+
 export async function getCurrentUser(): Promise<SessionUser | null> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value ?? null;
   if (!token) return null;
+
+  const cached = sessionCache.get(token);
+  if (cached && Date.now() < cached.until) {
+    return cached.user;
+  }
 
   try {
     const row = await dbQueryOne<SessionUser>(
@@ -45,6 +57,11 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
       `,
       [token],
     );
+    if (row) {
+      sessionCache.set(token, { user: row, until: Date.now() + SESSION_CACHE_TTL_MS });
+    } else {
+      sessionCache.delete(token);
+    }
     return row ?? null;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -87,6 +104,7 @@ export async function destroySession(): Promise<void> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value ?? null;
   if (token) {
+    invalidateSessionCache(token);
     await dbQueryOne("delete from public.sessions where token = $1 returning token", [token]);
   }
   store.set(SESSION_COOKIE, "", {

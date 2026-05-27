@@ -3,8 +3,7 @@ import { AdSenseScript } from "@/components/ads/adsense-script";
 import { AdSidebarRail } from "@/components/ads/ad-sidebar-rail";
 import { AdTopBanner } from "@/components/ads/ad-top-banner";
 import { YoutubeSubscribePopup } from "@/components/youtube-subscribe-popup";
-import { PresenceHeartbeatSlot } from "@/components/presence-heartbeat-slot";
-import { NotificationsBrowserSlot } from "@/components/notifications-browser-slot";
+import { SessionSyncSlot } from "@/components/session-sync-slot";
 import { SiteFooter } from "./site-footer";
 import { SiteHeader } from "./site-header";
 
@@ -33,8 +32,7 @@ export function PageShell({
         aria-hidden
       />
       <div className="relative flex min-h-full flex-1 flex-col">
-        <PresenceHeartbeatSlot />
-        <NotificationsBrowserSlot />
+        <SessionSyncSlot />
         <YoutubeSubscribePopup />
         <SiteHeader />
         <div

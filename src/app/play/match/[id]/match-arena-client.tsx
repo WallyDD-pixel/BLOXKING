@@ -41,6 +41,10 @@ import { uploadDisputeEvidenceClient } from "@/lib/upload-dispute-evidence-clien
 import { PVP_RECORDING_DISPUTE_HINT } from "@/lib/pvp-recording-copy";
 import { formatDateTimeFr } from "@/lib/format-datetime";
 import {
+  MATCH_ARENA_REFRESH_MS,
+  MATCH_DISPUTE_POLL_MS,
+} from "@/lib/polling/constants";
+import {
   MATCH_START_DEADLINE_MS,
   formatCountdownMs,
   matchAbandonDeadlineMs,
@@ -261,8 +265,9 @@ export function MatchArenaClient({
 
   useEffect(() => {
     const t = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
       void refresh();
-    }, 1800);
+    }, MATCH_ARENA_REFRESH_MS);
     return () => clearInterval(t);
   }, [refresh]);
 
@@ -294,7 +299,7 @@ export function MatchArenaClient({
       return;
     }
     void refreshDisputeThreads();
-    const t = setInterval(() => void refreshDisputeThreads(), 4000);
+    const t = setInterval(() => void refreshDisputeThreads(), MATCH_DISPUTE_POLL_MS);
     return () => clearInterval(t);
   }, [m.status, matchId, refreshDisputeThreads]);
 

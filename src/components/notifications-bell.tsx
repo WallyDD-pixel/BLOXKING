@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import {
+  SESSION_SYNC_EVENT,
+  type SessionSyncDetail,
+} from "@/lib/session-sync-event";
 
 type Props = {
   className?: string;
@@ -11,31 +15,13 @@ export function NotificationsBell({ className }: Props) {
   const [count, setCount] = useState(0);
 
   useEffect(() => {
-    let alive = true;
-    let unauthorized = false;
-    const load = async () => {
-      if (unauthorized) return;
-      try {
-        const res = await fetch("/api/notifications/unread-count", { cache: "no-store" });
-        if (res.status === 401) {
-          unauthorized = true;
-          if (alive) setCount(0);
-          return;
-        }
-        if (!res.ok) return;
-        const data = (await res.json()) as { count?: number };
-        if (alive) setCount(Number(data.count ?? 0));
-      } catch {
-        /* ignore polling errors */
-      }
+    const onSync = (event: Event) => {
+      const detail = (event as CustomEvent<SessionSyncDetail>).detail;
+      setCount(Number(detail?.unreadCount ?? 0));
     };
 
-    void load();
-    const id = setInterval(() => void load(), 15000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
+    window.addEventListener(SESSION_SYNC_EVENT, onSync);
+    return () => window.removeEventListener(SESSION_SYNC_EVENT, onSync);
   }, []);
 
   return (
