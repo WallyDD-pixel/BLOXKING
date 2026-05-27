@@ -9,6 +9,7 @@ import { YOUTUBE_CHANNEL_URL } from "@/lib/site-links";
 
 type Props = {
   isLoggedIn: boolean;
+  isAdmin?: boolean;
   display: string | null;
 };
 
@@ -58,7 +59,7 @@ function ChevronRight({ className }: { className?: string }) {
   );
 }
 
-export function SiteHeaderNav({ isLoggedIn, display }: Props) {
+export function SiteHeaderNav({ isLoggedIn, isAdmin = false, display }: Props) {
   const [drawerMounted, setDrawerMounted] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const navId = useId();
@@ -194,6 +195,16 @@ export function SiteHeaderNav({ isLoggedIn, display }: Props) {
                 <ChevronRight className={linkChevron} />
               </Link>
             ) : null}
+            {isAdmin ? (
+              <Link
+                href="/admin"
+                className={linkClass}
+                onClick={closeDrawer}
+              >
+                <span>Admin</span>
+                <ChevronRight className={linkChevron} />
+              </Link>
+            ) : null}
             <Link
               href="/classement"
               className={linkClass}
@@ -274,6 +285,14 @@ export function SiteHeaderNav({ isLoggedIn, display }: Props) {
             className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-400 transition hover:bg-white/5 hover:text-zinc-100"
           >
             Jouer
+          </Link>
+        ) : null}
+        {isAdmin ? (
+          <Link
+            href="/admin"
+            className="rounded-lg px-3 py-2 text-sm font-medium text-amber-400/90 transition hover:bg-amber-500/10 hover:text-amber-300"
+          >
+            Admin
           </Link>
         ) : null}
         <Link

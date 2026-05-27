@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { SiteHeaderNav } from "@/components/site-header-nav";
+import { userIsAdmin } from "@/lib/auth/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 
 export async function SiteHeader() {
   const user = await getCurrentUser();
+  const isAdmin = user ? await userIsAdmin(user) : false;
 
   const display = user?.roblox_username ?? user?.display_name ?? user?.email?.split("@")[0] ?? null;
 
@@ -19,7 +21,11 @@ export async function SiteHeader() {
           </span>
           <span className="text-zinc-100">KING</span>
         </Link>
-        <SiteHeaderNav isLoggedIn={Boolean(user)} display={display} />
+        <SiteHeaderNav
+          isLoggedIn={Boolean(user)}
+          isAdmin={isAdmin}
+          display={display}
+        />
       </div>
     </header>
   );

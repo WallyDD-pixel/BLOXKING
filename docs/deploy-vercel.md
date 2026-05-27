@@ -32,6 +32,7 @@ Dans le projet Vercel : **Settings** → **Environment Variables**.
 | `NEXT_PUBLIC_ADSENSE_SLOT_SIDEBAR_RIGHT` | optionnel | ID bloc pub colonne droite |
 | `NEXT_PUBLIC_ADSENSE_SLOT_BANNER_TOP` | optionnel | ID bannière horizontale sous le header |
 | `NEXT_PUBLIC_ADS_PLACEHOLDERS` | optionnel | `true` = cadres debug uniquement (jamais en prod) |
+| `ADMIN_EMAILS` | optionnel | Emails admin séparés par des virgules (accès `/admin`) |
 
 **Important après la première mise en ligne**
 
