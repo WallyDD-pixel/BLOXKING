@@ -9,6 +9,10 @@ import {
   sanitizeDisputeExplanation,
   validateDisputeStoragePaths,
 } from "@/lib/dispute-evidence";
+import {
+  notifyDisputeChatEmail,
+  notifyDisputeTicketEmail,
+} from "@/lib/notifications/dispute-notify";
 import { mapMatchRpcError } from "@/lib/match-rpc-errors";
 import { enrichMatchLabels } from "@/lib/match/enrich-labels";
 import { joinRankedQueue } from "@/lib/match/join-queue";
@@ -502,6 +506,12 @@ export async function postDisputeChatMessage(matchId: string, body: string) {
     );
     if (p.error) return { error: mapMatchRpcError(String(p.error)) };
     revalidateMatchPaths(matchId);
+    // Best-effort : ne bloque pas l’action utilisateur si le provider mail n’est pas configuré.
+    void notifyDisputeChatEmail({
+      matchId,
+      authorId: uid,
+      message: clean,
+    }).catch(() => null);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };
@@ -599,6 +609,11 @@ export async function matchSubmitDisputeTicket(
     if (p.error) return { error: mapMatchRpcError(String(p.error)) };
     revalidateMatchPaths(matchId);
     revalidatePath("/play/defis");
+    void notifyDisputeTicketEmail({
+      matchId,
+      authorId: uid,
+      explanation: clean,
+    }).catch(() => null);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };

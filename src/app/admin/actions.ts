@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/admin";
 import { rpcJson } from "@/lib/db/rpc";
 import { sanitizeDisputeChatMessage } from "@/lib/dispute-evidence";
+import { notifyDisputeChatEmail } from "@/lib/notifications/dispute-notify";
 
 function rpcPayload(raw: Record<string, unknown>) {
   return raw;
@@ -128,6 +129,11 @@ export async function adminPostDisputeChatMessage(
       return { error: "Impossible d’envoyer le message." };
     }
     revalidateAdmin(matchId);
+    void notifyDisputeChatEmail({
+      matchId,
+      authorId: admin.id,
+      message: clean,
+    }).catch(() => null);
     return { ok: true };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Erreur" };
