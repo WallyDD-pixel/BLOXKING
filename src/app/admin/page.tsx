@@ -74,11 +74,6 @@ export default async function AdminDashboardPage() {
           value={stats.matches_total}
           href="/admin/matchs?status=all"
         />
-        <StatCard
-          label="Défis ouverts"
-          value={stats.open_challenges}
-          href="/admin/matchs"
-        />
       </div>
 
       <div id="en-ligne">

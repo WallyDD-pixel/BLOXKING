@@ -8,7 +8,6 @@ export type AdminStats = {
   matches_active: number;
   matches_disputed: number;
   matches_confirmed: number;
-  open_challenges: number;
   presence_window_minutes: number;
 };
 
@@ -25,9 +24,7 @@ export async function getAdminStats(): Promise<AdminStats> {
       (select count(*)::int from public.matches
         where status = 'disputed' or dispute = true) as matches_disputed,
       (select count(*)::int from public.matches
-        where status = 'confirmed') as matches_confirmed,
-      (select count(*)::int from public.open_challenges
-        where status = 'open') as open_challenges
+        where status = 'confirmed') as matches_confirmed
     `,
     [PRESENCE_ONLINE_MINUTES],
   );
@@ -38,7 +35,6 @@ export async function getAdminStats(): Promise<AdminStats> {
     matches_active: 0,
     matches_disputed: 0,
     matches_confirmed: 0,
-    open_challenges: 0,
   };
   return {
     ...base,

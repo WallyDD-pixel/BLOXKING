@@ -441,7 +441,7 @@ export function MatchArenaClient({
                 — aucun ELO n&apos;a changé.
               </p>
               <p className="mt-3 text-sm text-zinc-500">
-                Tu peux relancer une recherche ou accepter un autre défi.
+                Tu peux relancer une recherche matchmaking.
               </p>
             </>
           ) : abandoned ? (
@@ -453,7 +453,7 @@ export function MatchArenaClient({
                 match abandonné — aucun ELO n&apos;a changé.
               </p>
               <p className="mt-3 text-sm text-zinc-500">
-                Tu peux relancer une recherche ou un défi.
+                Tu peux relancer une recherche matchmaking.
               </p>
             </>
           ) : disputeTimeout ? (
@@ -466,7 +466,7 @@ export function MatchArenaClient({
                 d&apos;ELO n&apos;est enregistré.
               </p>
               <p className="mt-3 text-sm text-zinc-500">
-                Tu peux relancer une recherche ou un défi : ce match ne bloque plus
+                Tu peux relancer une recherche matchmaking : ce match ne bloque plus
                 ta file.
               </p>
             </>
@@ -479,7 +479,7 @@ export function MatchArenaClient({
                 Aucun résultat ranked ni changement d&apos;ELO n&apos;est enregistré.
               </p>
               <p className="mt-3 text-sm text-zinc-500">
-                Tu peux relancer une recherche ou un défi.
+                Tu peux relancer une recherche matchmaking.
               </p>
             </>
           ) : (
@@ -489,7 +489,7 @@ export function MatchArenaClient({
                 d&apos;ELO n&apos;est enregistré.
               </p>
               <p className="mt-3 text-sm text-zinc-500">
-                Tu peux relancer une recherche ou un défi.
+                Tu peux relancer une recherche matchmaking.
               </p>
             </>
           )}

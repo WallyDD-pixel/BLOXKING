@@ -40,7 +40,7 @@ export default async function MatchPage({
     m.player_b,
   );
 
-  const sourceLabel = m.source === "queue" ? "Matchmaking" : "Défi ouvert";
+  const sourceLabel = m.source === "queue" ? "Matchmaking" : "Ancien défi";
 
   const { requests: cancellationRequests } =
     m.status === "pending" || m.status === "disputed"

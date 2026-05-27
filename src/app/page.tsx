@@ -70,7 +70,7 @@ function IconUser() {
 const features = [
   {
     title: "Duels 1v1 classés",
-    desc: "BO3 en solo : défis ou matchmaking. Chaque match validé fait évoluer ton ELO sur le site.",
+    desc: "BO3 en solo via matchmaking. Chaque match validé fait évoluer ton ELO sur le site.",
     Icon: IconUser,
   },
   {

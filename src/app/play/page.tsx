@@ -83,46 +83,26 @@ export default async function PlayHomePage() {
 
       <div>
         <h2 className="mb-4 font-mono text-[0.65rem] font-semibold uppercase tracking-[0.4em] text-amber-500/65">
-          Missions
+          Matchmaking
         </h2>
-        <ul className="grid gap-4 sm:grid-cols-2">
-          <li className="game-panel group rounded-xl p-6 transition hover:border-amber-400/30">
-            <div className="mb-3 inline-flex rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-wider text-amber-400/95">
-              PvP
-            </div>
-            <h3 className="font-[family-name:var(--font-bebas)] text-2xl tracking-wide text-white">
-              DÉFIS OUVERTS
-            </h3>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-500">
-              Liste des combats proposés — choisis un adversaire et accepte le
-              duel.
-            </p>
-            <Link
-              href="/play/defis"
-              className="game-btn-primary mt-6 inline-block px-6 py-3 font-[family-name:var(--font-bebas)] text-lg tracking-wide text-zinc-950"
-            >
-              <span>Entrer dans l&apos;arène</span>
-            </Link>
-          </li>
-          <li className="game-panel group rounded-xl p-6 transition hover:border-amber-400/30">
-            <div className="mb-3 inline-flex rounded border border-zinc-600/50 bg-zinc-800/50 px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-wider text-zinc-300">
-              File
-            </div>
-            <h3 className="font-[family-name:var(--font-bebas)] text-2xl tracking-wide text-white">
-              RECHERCHE
-            </h3>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-500">
-              Matchmaking automatique : le système te jumelle au prochain joueur
-              en attente.
-            </p>
-            <Link
-              href="/play/recherche"
-              className="game-btn-ghost mt-6 inline-block px-6 py-3 font-[family-name:var(--font-bebas)] text-lg tracking-wide text-amber-50"
-            >
-              <span>Lancer la recherche</span>
-            </Link>
-          </li>
-        </ul>
+        <div className="game-panel rounded-xl p-6 sm:p-8">
+          <div className="mb-3 inline-flex rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-wider text-amber-400/95">
+            PvP 1v1
+          </div>
+          <h3 className="font-[family-name:var(--font-bebas)] text-3xl tracking-wide text-white">
+            RECHERCHE CLASSÉE
+          </h3>
+          <p className="mt-3 max-w-prose text-sm leading-relaxed text-zinc-500">
+            Lance la file matchmaking : le système te jumelle au prochain joueur en
+            attente pour un duel BO3 classé.
+          </p>
+          <Link
+            href="/play/recherche"
+            className="game-btn-primary mt-6 inline-block px-6 py-3 font-[family-name:var(--font-bebas)] text-lg tracking-wide text-zinc-950"
+          >
+            <span>Lancer la recherche</span>
+          </Link>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-4 border-t border-white/10 pt-6">

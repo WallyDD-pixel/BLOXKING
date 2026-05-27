@@ -14,7 +14,7 @@ function opponentDisplayName(row: OngoingMatchRow, viewerId: string): string {
 }
 
 function sourceBadge(source: string): string {
-  return source === "queue" ? "Matchmaking" : "Défi ouvert";
+  return source === "queue" ? "Matchmaking" : "Ancien défi";
 }
 
 function statusMeta(row: OngoingMatchRow): {
@@ -121,18 +121,12 @@ export default async function MesRencontresPage() {
             Aucune rencontre enregistrée pour l&apos;instant.
           </p>
           <p className="mt-2 text-sm text-zinc-500">
-            Lance un défi ou la recherche matchmaking pour remplir cet historique.
+            Lance la recherche matchmaking pour remplir cet historique.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Link
-              href="/play/defis"
-              className="game-btn-primary inline-flex px-6 py-3 font-[family-name:var(--font-bebas)] text-lg tracking-wide text-zinc-950"
-            >
-              <span>Défis</span>
-            </Link>
-            <Link
               href="/play/recherche"
-              className="game-btn-ghost inline-flex px-6 py-3 font-[family-name:var(--font-bebas)] text-lg tracking-wide text-amber-50"
+              className="game-btn-primary inline-flex px-6 py-3 font-[family-name:var(--font-bebas)] text-lg tracking-wide text-zinc-950"
             >
               <span>Recherche</span>
             </Link>

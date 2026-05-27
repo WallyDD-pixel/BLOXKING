@@ -137,106 +137,6 @@ export async function listMatchHistory(
   }
 }
 
-export async function createChallenge() {
-  const uid = await getUserId();
-  if (!uid) return { error: "Non connecté" };
-
-  const user = await getCurrentUser();
-  const display =
-    user?.roblox_username ?? user?.display_name ?? user?.email?.split("@")[0] ?? "Joueur";
-
-  try {
-    await expireStaleMatchesIfNeededAction();
-
-    const active = await dbQueryOne<{ c: string }>(
-      `
-      select count(*)::text as c from public.matches
-      where (player_a = $1 or player_b = $1) and status in ('pending', 'disputed')
-      `,
-      [uid],
-    );
-    if (Number(active?.c ?? 0) > 0) {
-      return {
-        error:
-          "Tu as déjà une rencontre en cours. Termine-la ou résous le litige avant de publier un défi.",
-      };
-    }
-
-    await dbQueryOne(
-      `
-      insert into public.open_challenges (creator_id, creator_display_name, status)
-      values ($1, $2, 'open')
-      returning id
-      `,
-      [uid, display],
-    );
-    revalidatePath("/play/defis");
-    return { ok: true as const };
-  } catch (e) {
-    return { error: dbError(e) };
-  }
-}
-
-export async function cancelChallenge(challengeId: string) {
-  const uid = await getUserId();
-  if (!uid) return { error: "Non connecté" };
-
-  try {
-    await dbQueryOne(
-      `
-      update public.open_challenges
-      set status = 'cancelled'
-      where id = $1 and creator_id = $2 and status = 'open'
-      returning id
-      `,
-      [challengeId, uid],
-    );
-    revalidatePath("/play/defis");
-    return { ok: true as const };
-  } catch (e) {
-    return { error: dbError(e) };
-  }
-}
-
-export async function cancelChallengeForm(formData: FormData) {
-  const id = formData.get("id");
-  if (typeof id !== "string") return;
-  await cancelChallenge(id);
-}
-
-export async function acceptChallenge(challengeId: string) {
-  const uid = await getUserId();
-  if (!uid) return { error: "Non connecté" };
-
-  try {
-    await expireStaleMatchesIfNeededAction();
-
-    const payload = await callUserRpc(
-      uid,
-      `select accept_open_challenge($1::uuid) as result`,
-      [challengeId],
-    );
-    if (payload.error) return { error: mapMatchRpcError(String(payload.error)) };
-    const mid = payload.match_id as string | undefined;
-    if (mid) await enrichMatchLabels(mid);
-    revalidatePath("/play/defis");
-    revalidatePath("/play/recherche");
-    return { ok: true as const, matchId: mid };
-  } catch (e) {
-    return { error: dbError(e) };
-  }
-}
-
-export async function acceptChallengeForm(formData: FormData) {
-  const id = formData.get("challengeId");
-  if (typeof id !== "string") return;
-  await acceptChallenge(id);
-}
-
-export async function createChallengeForm(_formData: FormData) {
-  await createChallenge();
-}
-
 export async function joinQueue() {
   const uid = await getUserId();
   if (!uid) return { error: "Non connecté", matched: false };
@@ -706,7 +606,6 @@ export async function matchSubmitDisputeTicket(
     );
     if (p.error) return { error: mapMatchRpcError(String(p.error)) };
     revalidateMatchPaths(matchId);
-    revalidatePath("/play/defis");
     void notifyDisputeTicketEmail({
       matchId,
       authorId: uid,

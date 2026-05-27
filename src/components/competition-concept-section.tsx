@@ -8,7 +8,7 @@ const steps = [
   {
     tag: "Format",
     title: "1v1 uniquement",
-    desc: "Pas de 2v2 ni d’équipes : chaque match est un duel solo en BO3 (premier à 2 manches). Défis ouverts ou file matchmaking.",
+    desc: "Pas de 2v2 ni d’équipes : chaque match est un duel solo en BO3 (premier à 2 manches). File matchmaking classée.",
   },
   {
     tag: "Saison ranked",

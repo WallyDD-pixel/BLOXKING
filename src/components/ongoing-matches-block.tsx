@@ -10,7 +10,7 @@ import { formatDateTimeFr } from "@/lib/format-datetime";
 import { searchBlob } from "@/lib/table-search";
 
 function sourceLabel(source: string): string {
-  return source === "queue" ? "Matchmaking" : "Défi";
+  return source === "queue" ? "Matchmaking" : "Ancien défi";
 }
 
 export function OngoingMatchesBlock({
@@ -81,7 +81,7 @@ export function OngoingMatchesBlock({
             Aucune rencontre en cours.
           </p>
           <p className="mt-1 text-sm text-zinc-600">
-            Lance une recherche ci-dessus ou un défi depuis l&apos;Arène.
+            Lance une recherche matchmaking ci-dessus pour trouver un adversaire.
           </p>
         </div>
       ) : (

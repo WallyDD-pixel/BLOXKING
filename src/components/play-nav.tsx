@@ -15,16 +15,6 @@ const links = [
     ),
   },
   {
-    href: "/play/defis",
-    label: "Arène",
-    sub: "Défis ouverts",
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.652a3.75 3.75 0 010-5.304m5.304 0a3.75 3.75 0 010 5.304m-7.425-2.121a6 6 0 010 8.485m8.485 0a6 6 0 010-8.485M12 12h.008v.008H12V12z" />
-      </svg>
-    ),
-  },
-  {
     href: "/play/recherche",
     label: "Matchmaking",
     sub: "Recherche",
@@ -51,7 +41,7 @@ export function PlayNav() {
 
   return (
     <nav
-      className="mb-8 grid grid-cols-2 gap-2 lg:grid-cols-4"
+      className="mb-8 grid grid-cols-2 gap-2 lg:grid-cols-3"
       aria-label="Menu espace joueur"
     >
       {links.map(({ href, label, sub, icon }) => {
