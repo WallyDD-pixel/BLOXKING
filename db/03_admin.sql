@@ -130,6 +130,50 @@ begin
 end;
 $$;
 
+create or replace function public.admin_post_dispute_chat_message(
+  p_match_id uuid,
+  p_body text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := (nullif(current_setting('app.user_id', true), '')::uuid);
+  t text := trim(coalesce(p_body, ''));
+  new_id uuid;
+begin
+  perform public.assert_app_user_is_admin();
+
+  if uid is null then
+    return jsonb_build_object('error', 'not_authenticated');
+  end if;
+
+  if char_length(t) < 1 then
+    return jsonb_build_object('error', 'chat_body_too_short');
+  end if;
+  if char_length(t) > 2000 then
+    return jsonb_build_object('error', 'chat_body_too_long');
+  end if;
+
+  if not exists (
+    select 1
+    from public.matches m
+    where m.id = p_match_id
+  ) then
+    return jsonb_build_object('error', 'not_found');
+  end if;
+
+  insert into public.match_dispute_chat_messages (match_id, author_id, body)
+  values (p_match_id, uid, t)
+  returning id into new_id;
+
+  return jsonb_build_object('ok', true, 'id', new_id);
+end;
+$$;
+
 grant execute on function public.admin_resolve_match(uuid, int, int) to public;
 grant execute on function public.admin_cancel_match(uuid) to public;
 grant execute on function public.admin_reset_match_dispute(uuid) to public;
+grant execute on function public.admin_post_dispute_chat_message(uuid, text) to public;

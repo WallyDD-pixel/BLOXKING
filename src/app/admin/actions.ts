@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/admin";
 import { rpcJson } from "@/lib/db/rpc";
+import { sanitizeDisputeChatMessage } from "@/lib/dispute-evidence";
 
 function rpcPayload(raw: Record<string, unknown>) {
   return raw;
@@ -98,6 +99,35 @@ export async function adminResetDispute(
     if (p.error) return { error: "Impossible de réinitialiser le litige." };
     revalidateAdmin(matchId);
     revalidatePath(`/play/match/${matchId}`);
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erreur" };
+  }
+}
+
+export async function adminPostDisputeChatMessage(
+  matchId: string,
+  body: string,
+): Promise<{ ok?: true; error?: string }> {
+  const admin = await requireAdmin();
+  const clean = sanitizeDisputeChatMessage(body);
+  if (clean.length < 1) return { error: "Message vide." };
+
+  try {
+    const p = rpcPayload(
+      await callAdminRpc(
+        admin.id,
+        `select admin_post_dispute_chat_message($1::uuid, $2::text) as result`,
+        [matchId, clean],
+      ),
+    );
+    if (p.error) {
+      const code = String(p.error);
+      if (code === "chat_body_too_short") return { error: "Message trop court." };
+      if (code === "chat_body_too_long") return { error: "Message trop long (2000 max)." };
+      return { error: "Impossible d’envoyer le message." };
+    }
+    revalidateAdmin(matchId);
     return { ok: true };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Erreur" };

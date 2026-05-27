@@ -14,6 +14,7 @@ import {
 import { disputeEvidencePublicUrl } from "@/lib/storage/dispute-evidence-url";
 import { DisputeEvidencePreview } from "@/components/match/dispute-evidence-preview";
 import { getCurrentUser } from "@/lib/auth/session";
+import { AdminDisputeChatComposer } from "@/components/admin/admin-dispute-chat-composer";
 
 export default async function AdminDisputeDetailPage({
   params,
@@ -159,6 +160,9 @@ export default async function AdminDisputeDetailPage({
 
       <section>
         <h2 className="text-lg font-semibold text-zinc-100">Chat litige</h2>
+        <div className="mt-3">
+          <AdminDisputeChatComposer matchId={match.id} />
+        </div>
         {chat.length === 0 ? (
           <p className="mt-2 text-sm text-zinc-500">Aucun message.</p>
         ) : (
