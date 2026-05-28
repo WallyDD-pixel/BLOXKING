@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { AdminOnlineUsers } from "@/components/admin/admin-online-users";
+import { AdminPvpToggle } from "@/components/admin/admin-pvp-toggle";
 import { AdminSmtpTest } from "@/components/admin/admin-smtp-test";
 import { getAdminStats } from "@/lib/admin/queries";
+import { getPvpOperationalState } from "@/lib/site/pvp";
 
 function StatCard({
   label,
@@ -35,10 +37,18 @@ function StatCard({
 }
 
 export default async function AdminDashboardPage() {
-  const stats = await getAdminStats();
+  const [stats, pvpState] = await Promise.all([
+    getAdminStats(),
+    getPvpOperationalState(),
+  ]);
 
   return (
     <div className="space-y-8">
+      <AdminPvpToggle
+        initialEnabled={pvpState.pvpEnabled}
+        updatedAt={pvpState.updatedAt}
+      />
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           label="Utilisateurs"

@@ -11,6 +11,7 @@ import {
   notifyMatchResultInApp,
   notifyOtherPlayerDisputeMessageInApp,
 } from "@/lib/notifications-inapp/events";
+import { setPvpEnabled } from "@/lib/site/pvp";
 
 function rpcPayload(raw: Record<string, unknown>) {
   return raw;
@@ -32,7 +33,22 @@ function revalidateAdmin(matchId?: string) {
   revalidatePath("/admin/matchs");
   revalidatePath("/admin/litiges");
   revalidatePath("/admin/utilisateurs");
+  revalidatePath("/play");
+  revalidatePath("/play/recherche");
   if (matchId) revalidatePath(`/admin/litiges/${matchId}`);
+}
+
+export async function adminSetPvpEnabled(
+  enabled: boolean,
+): Promise<{ ok?: true; error?: string }> {
+  const admin = await requireAdmin();
+  try {
+    await setPvpEnabled(enabled, admin.id);
+    revalidateAdmin();
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erreur" };
+  }
 }
 
 export async function adminResolveMatch(

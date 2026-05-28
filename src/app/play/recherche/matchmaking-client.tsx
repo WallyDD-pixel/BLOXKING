@@ -12,6 +12,7 @@ import {
   type OngoingMatchRow,
 } from "@/app/play/actions";
 import { OngoingMatchesBlock } from "@/components/ongoing-matches-block";
+import { PvpDisabledBanner } from "@/components/pvp-disabled-banner";
 import { PvpRecordingTip } from "@/components/pvp-recording-tip";
 import {
   clearMatchmakingSearch,
@@ -150,11 +151,13 @@ export function MatchmakingClient({
   displayName,
   initialOngoingMatches,
   placementMatchesPlayed,
+  pvpEnabled = true,
 }: {
   userId: string;
   displayName: string;
   initialOngoingMatches: OngoingMatchRow[];
   placementMatchesPlayed: number;
+  pvpEnabled?: boolean;
 }) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("idle");
@@ -251,6 +254,12 @@ export function MatchmakingClient({
    * Dépendances minimales pour ne pas couper le polling lancé par « Initialiser ».
    */
   useEffect(() => {
+    if (!pvpEnabled) {
+      clearMatchmakingSearch(userId);
+      stopPolling();
+      setPhase("idle");
+      return;
+    }
     if (initialOngoingMatches.length > 0) {
       clearMatchmakingSearch(userId);
       return;
@@ -275,7 +284,7 @@ export function MatchmakingClient({
       clearInterval(id);
       if (pollRef.current === id) pollRef.current = null;
     };
-  }, [userId, initialOngoingMatches.length, stopPolling]);
+  }, [userId, initialOngoingMatches.length, stopPolling, pvpEnabled]);
 
   useEffect(() => {
     if (!blockNewScan) return;
@@ -310,6 +319,7 @@ export function MatchmakingClient({
   }, [phase, match?.id, router]);
 
   async function handleJoin() {
+    if (!pvpEnabled) return;
     stopPolling();
     setError(null);
     setServiceFallback(false);
@@ -376,7 +386,11 @@ export function MatchmakingClient({
 
       {phase === "idle" && (
         <div className="text-center">
-          {blockNewScan ? (
+          {!pvpEnabled ? (
+            <div className="mx-auto max-w-lg text-left">
+              <PvpDisabledBanner />
+            </div>
+          ) : blockNewScan ? (
             <div className="mx-auto max-w-lg rounded-xl border border-amber-500/35 bg-amber-500/[0.08] px-5 py-6 text-left">
               <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-wider text-amber-200">
                 Rencontre en cours
@@ -413,7 +427,13 @@ export function MatchmakingClient({
         </div>
       )}
 
-      {phase === "searching" && (
+      {phase === "searching" && !pvpEnabled ? (
+        <div className="mx-auto max-w-lg">
+          <PvpDisabledBanner />
+        </div>
+      ) : null}
+
+      {phase === "searching" && pvpEnabled ? (
         <div className="mx-auto grid w-full max-w-lg grid-cols-2 gap-x-2 gap-y-5 lg:max-w-none lg:grid-cols-[auto_minmax(260px,min(100%,320px))_auto] lg:items-start lg:justify-center lg:gap-x-10 lg:gap-y-0">
           <div className="col-start-1 row-start-1 min-w-0 lg:col-start-1 lg:row-start-1 lg:justify-self-end">
             <PlayerQueueCard displayName={displayName} userId={userId} />
@@ -468,7 +488,7 @@ export function MatchmakingClient({
             </button>
           </div>
         </div>
-      )}
+      ) : null}
 
       {phase === "matched" && match && (
         <div className="match-found mm-match-reveal-ring relative flex min-h-[280px] flex-col items-center justify-center overflow-hidden rounded-xl border border-amber-400/50 bg-gradient-to-b from-amber-500/20 via-zinc-950/80 to-zinc-950 px-6 py-14 text-center shadow-[0_0_48px_rgba(245,158,11,0.12)] sm:min-h-[320px] sm:px-10 sm:py-16">

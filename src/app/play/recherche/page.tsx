@@ -1,8 +1,10 @@
 import { MatchmakingClient } from "@/app/play/recherche/matchmaking-client";
 import { RechercheHashScroll } from "@/app/play/recherche/hash-scroll";
 import { listOngoingMatches } from "@/app/play/actions";
+import { PvpDisabledBanner } from "@/components/pvp-disabled-banner";
 import { getCurrentUser } from "@/lib/auth/session";
 import { dbQueryOne } from "@/lib/db/query";
+import { getPvpEnabled } from "@/lib/site/pvp";
 
 export default async function RecherchePage() {
   const user = await getCurrentUser();
@@ -18,6 +20,7 @@ export default async function RecherchePage() {
     [user.id],
   );
   const placementMatchesPlayed = rankedRow?.placement_matches_played ?? 0;
+  const pvpEnabled = await getPvpEnabled();
 
   return (
     <div className="space-y-8">
@@ -43,6 +46,7 @@ export default async function RecherchePage() {
           displayName={displayName}
           initialOngoingMatches={ongoingMatches}
           placementMatchesPlayed={placementMatchesPlayed}
+          pvpEnabled={pvpEnabled}
         />
       </div>
     </div>

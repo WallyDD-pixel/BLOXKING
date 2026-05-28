@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { BlameStatusBanner } from "@/components/blame-status-banner";
 import { PlacementProgress } from "@/components/placement-progress";
+import { PvpDisabledBanner } from "@/components/pvp-disabled-banner";
 import { YoutubeLiveBadge } from "@/components/youtube-live-badge";
 import { getCurrentUser } from "@/lib/auth/session";
 import { dbQueryOne } from "@/lib/db/query";
+import { getPvpEnabled } from "@/lib/site/pvp";
 import { FINAL_PRIZE_ROBUX, FINALIST_COUNT } from "@/lib/competition-copy";
 import { DEFAULT_ELO } from "@/lib/ranked";
 
@@ -39,6 +41,7 @@ export default async function PlayHomePage() {
   const placementMatchesPlayed = rankedRow?.placement_matches_played ?? 0;
   const elo = rankedRow?.elo ?? DEFAULT_ELO;
   const blameActive = rankedRow?.blame_active ?? false;
+  const pvpEnabled = await getPvpEnabled();
 
   return (
     <div className="space-y-10">
@@ -112,16 +115,28 @@ export default async function PlayHomePage() {
           <h3 className="font-[family-name:var(--font-bebas)] text-3xl tracking-wide text-white">
             RECHERCHE CLASSÉE
           </h3>
-          <p className="mt-3 max-w-prose text-sm leading-relaxed text-zinc-500">
-            Lance la file matchmaking : le système te jumelle au prochain joueur en
-            attente pour un duel BO3 classé.
-          </p>
-          <Link
-            href="/play/recherche"
-            className="game-btn-primary mt-6 inline-block px-6 py-3 font-[family-name:var(--font-bebas)] text-lg tracking-wide text-zinc-950"
-          >
-            <span>Lancer la recherche</span>
-          </Link>
+          {pvpEnabled ? (
+            <p className="mt-3 max-w-prose text-sm leading-relaxed text-zinc-500">
+              Lance la file matchmaking : le système te jumelle au prochain joueur
+              en attente pour un duel BO3 classé.
+            </p>
+          ) : (
+            <div className="mt-4">
+              <PvpDisabledBanner />
+            </div>
+          )}
+          {pvpEnabled ? (
+            <Link
+              href="/play/recherche"
+              className="game-btn-primary mt-6 inline-block px-6 py-3 font-[family-name:var(--font-bebas)] text-lg tracking-wide text-zinc-950"
+            >
+              <span>Lancer la recherche</span>
+            </Link>
+          ) : (
+            <p className="mt-6 font-mono text-xs uppercase tracking-wider text-zinc-600">
+              Recherche indisponible
+            </p>
+          )}
         </div>
       </div>
 

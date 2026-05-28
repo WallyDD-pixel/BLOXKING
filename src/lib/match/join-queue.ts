@@ -7,6 +7,7 @@ import {
 } from "@/lib/match/matchmaking-pairing";
 import { loadRecentQueueOpponents } from "@/lib/match/recent-opponents";
 import { mapMatchRpcError } from "@/lib/match-rpc-errors";
+import { getPvpEnabled, PVP_DISABLED_PLAYER_MESSAGE } from "@/lib/site/pvp";
 
 export type JoinQueueResult =
   | { ok: true; matched: false }
@@ -37,6 +38,10 @@ export async function joinRankedQueue(
 ): Promise<JoinQueueResult> {
   await sleepRandomJitterMs();
   await expireStaleMatchesIfNeeded();
+
+  if (!(await getPvpEnabled())) {
+    return { error: PVP_DISABLED_PLAYER_MESSAGE };
+  }
 
   const banned = await dbQueryOne<{ banned_at: string | null }>(
     `select banned_at from public.users where id = $1`,

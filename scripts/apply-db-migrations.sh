@@ -29,6 +29,7 @@ MIGRATIONS=(
   "18_start_dodge_bloxking_grants.sql"
   "19_matchmaking_block_same_ip.sql"
   "20_admin_dispute_decisions.sql"
+  "21_site_pvp_toggle.sql"
 )
 
 echo "Repo: $REPO_ROOT"
