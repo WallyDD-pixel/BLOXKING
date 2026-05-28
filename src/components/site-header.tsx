@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { SiteHeaderNav } from "@/components/site-header-nav";
-import { userIsAdmin } from "@/lib/auth/admin";
+import { userCanAccessAdminPanel } from "@/lib/auth/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 
 export async function SiteHeader() {
   const user = await getCurrentUser();
-  const isAdmin = user ? await userIsAdmin(user) : false;
+  const isAdmin = user ? await userCanAccessAdminPanel(user) : false;
 
   const display = user?.roblox_username ?? user?.display_name ?? user?.email?.split("@")[0] ?? null;
 

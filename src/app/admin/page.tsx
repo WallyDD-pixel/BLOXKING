@@ -3,6 +3,7 @@ import { AdminOnlineUsers } from "@/components/admin/admin-online-users";
 import { AdminPvpToggle } from "@/components/admin/admin-pvp-toggle";
 import { AdminSmtpTest } from "@/components/admin/admin-smtp-test";
 import { getAdminStats } from "@/lib/admin/queries";
+import { requireAdminPanel } from "@/lib/auth/admin";
 import { getPvpOperationalState } from "@/lib/site/pvp";
 
 function StatCard({
@@ -37,17 +38,28 @@ function StatCard({
 }
 
 export default async function AdminDashboardPage() {
+  const access = await requireAdminPanel();
   const [stats, pvpState] = await Promise.all([
     getAdminStats(),
-    getPvpOperationalState(),
+    access.isFullAdmin ? getPvpOperationalState() : Promise.resolve(null),
   ]);
 
   return (
     <div className="space-y-8">
-      <AdminPvpToggle
-        initialEnabled={pvpState.pvpEnabled}
-        updatedAt={pvpState.updatedAt}
-      />
+      {access.isDisputeModerator ? (
+        <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          Tu es connecté en tant que{" "}
+          <strong className="text-white">modérateur litiges</strong> : accès à
+          la vue d’ensemble, aux matchs et aux litiges uniquement.
+        </p>
+      ) : null}
+
+      {access.isFullAdmin && pvpState ? (
+        <AdminPvpToggle
+          initialEnabled={pvpState.pvpEnabled}
+          updatedAt={pvpState.updatedAt}
+        />
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
@@ -93,14 +105,16 @@ export default async function AdminDashboardPage() {
         />
       </div>
 
-      <AdminSmtpTest />
+      {access.isFullAdmin ? <AdminSmtpTest /> : null}
 
-      <p className="text-sm text-zinc-500">
-        Accès réservé aux comptes admin. Configure{" "}
-        <code className="text-zinc-400">ADMIN_EMAILS</code> dans l’environnement
-        ou <code className="text-zinc-400">is_admin</code> en base (
-        <code className="text-zinc-400">db/03_admin.sql</code>).
-      </p>
+      {access.isFullAdmin ? (
+        <p className="text-sm text-zinc-500">
+          Accès réservé aux comptes admin. Configure{" "}
+          <code className="text-zinc-400">ADMIN_EMAILS</code> dans
+          l’environnement ou attribue les rôles dans{" "}
+          <code className="text-zinc-400">Utilisateurs</code>.
+        </p>
+      ) : null}
     </div>
   );
 }

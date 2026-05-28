@@ -18,14 +18,17 @@ type Props = {
   matchId: string;
   playerA: PlayerModerationStatus;
   playerB: PlayerModerationStatus;
+  canManageBans?: boolean;
 };
 
 function PlayerModerationCard({
   matchId,
   player,
+  canManageBans,
 }: {
   matchId: string;
   player: PlayerModerationStatus;
+  canManageBans: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -121,25 +124,33 @@ function PlayerModerationCard({
             ) : null}
           </div>
 
-          <textarea
-            value={banReason}
-            onChange={(e) => setBanReason(e.target.value)}
-            placeholder="Motif du ban (récidive…)"
-            rows={2}
-            className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100"
-          />
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() =>
-              run(() => adminBanUser(player.user_id, banReason || undefined))
-            }
-            className="rounded-lg border border-red-500/50 bg-red-500/15 px-3 py-2 text-sm font-semibold text-red-100 hover:bg-red-500/25 disabled:opacity-50"
-          >
-            Bannir du site
-          </button>
+          {canManageBans ? (
+            <>
+              <textarea
+                value={banReason}
+                onChange={(e) => setBanReason(e.target.value)}
+                placeholder="Motif du ban (récidive…)"
+                rows={2}
+                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100"
+              />
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  run(() => adminBanUser(player.user_id, banReason || undefined))
+                }
+                className="rounded-lg border border-red-500/50 bg-red-500/15 px-3 py-2 text-sm font-semibold text-red-100 hover:bg-red-500/25 disabled:opacity-50"
+              >
+                Bannir du site
+              </button>
+            </>
+          ) : (
+            <p className="text-xs text-zinc-600">
+              Ban réservé aux administrateurs complets.
+            </p>
+          )}
         </div>
-      ) : (
+      ) : canManageBans ? (
         <button
           type="button"
           disabled={pending}
@@ -148,7 +159,7 @@ function PlayerModerationCard({
         >
           Lever le ban
         </button>
-      )}
+      ) : null}
 
       {message ? (
         <p
@@ -161,7 +172,12 @@ function PlayerModerationCard({
   );
 }
 
-export function AdminDisputeModeration({ matchId, playerA, playerB }: Props) {
+export function AdminDisputeModeration({
+  matchId,
+  playerA,
+  playerB,
+  canManageBans = false,
+}: Props) {
   return (
     <section className="rounded-xl border border-red-500/25 bg-red-500/[0.04] p-5">
       <h2 className="text-lg font-semibold text-zinc-100">
@@ -175,8 +191,16 @@ export function AdminDisputeModeration({ matchId, playerA, playerB }: Props) {
         Ban en cas de récidive.
       </p>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <PlayerModerationCard matchId={matchId} player={playerA} />
-        <PlayerModerationCard matchId={matchId} player={playerB} />
+        <PlayerModerationCard
+          matchId={matchId}
+          player={playerA}
+          canManageBans={canManageBans}
+        />
+        <PlayerModerationCard
+          matchId={matchId}
+          player={playerB}
+          canManageBans={canManageBans}
+        />
       </div>
     </section>
   );

@@ -1,7 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth/admin";
+import {
+  requireDisputeStaff,
+  requireFullAdmin,
+} from "@/lib/auth/admin";
+import { dbQuery } from "@/lib/db/query";
 import { rpcJson } from "@/lib/db/rpc";
 import { sanitizeDisputeChatMessage } from "@/lib/dispute-evidence";
 import { notifyDisputeChatEmail } from "@/lib/notifications/dispute-notify";
@@ -38,10 +42,32 @@ function revalidateAdmin(matchId?: string) {
   if (matchId) revalidatePath(`/admin/litiges/${matchId}`);
 }
 
+export async function adminSetDisputeModerator(
+  userId: string,
+  enabled: boolean,
+): Promise<{ ok?: true; error?: string }> {
+  await requireFullAdmin();
+  try {
+    await dbQuery(
+      `
+      update public.users
+      set is_dispute_moderator = $2
+      where id = $1::uuid
+        and coalesce(is_admin, false) = false
+      `,
+      [userId, enabled],
+    );
+    revalidateAdmin();
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erreur" };
+  }
+}
+
 export async function adminSetPvpEnabled(
   enabled: boolean,
 ): Promise<{ ok?: true; error?: string }> {
-  const admin = await requireAdmin();
+  const admin = await requireFullAdmin();
   try {
     await setPvpEnabled(enabled, admin.id);
     revalidateAdmin();
@@ -56,7 +82,7 @@ export async function adminResolveMatch(
   mapsA: number,
   mapsB: number,
 ): Promise<{ ok?: true; error?: string }> {
-  const admin = await requireAdmin();
+  const admin = await requireDisputeStaff();
   const ma = Math.floor(mapsA);
   const mb = Math.floor(mapsB);
 
@@ -92,7 +118,7 @@ export async function adminResolveMatch(
 export async function adminCancelMatch(
   matchId: string,
 ): Promise<{ ok?: true; error?: string }> {
-  const admin = await requireAdmin();
+  const admin = await requireDisputeStaff();
   try {
     const p = rpcPayload(
       await callAdminRpc(
@@ -113,7 +139,7 @@ export async function adminCancelMatch(
 export async function adminResetDispute(
   matchId: string,
 ): Promise<{ ok?: true; error?: string }> {
-  const admin = await requireAdmin();
+  const admin = await requireDisputeStaff();
   try {
     const p = rpcPayload(
       await callAdminRpc(
@@ -136,7 +162,7 @@ export async function adminApplyBlame(
   matchId: string,
   note?: string,
 ): Promise<{ ok?: true; error?: string }> {
-  const admin = await requireAdmin();
+  const admin = await requireDisputeStaff();
   try {
     const p = rpcPayload(
       await callAdminRpc(
@@ -161,7 +187,7 @@ export async function adminApplyBlame(
 export async function adminClearBlame(
   userId: string,
 ): Promise<{ ok?: true; error?: string }> {
-  const admin = await requireAdmin();
+  const admin = await requireDisputeStaff();
   try {
     const p = rpcPayload(
       await callAdminRpc(
@@ -182,7 +208,7 @@ export async function adminBanUser(
   userId: string,
   reason?: string,
 ): Promise<{ ok?: true; error?: string }> {
-  const admin = await requireAdmin();
+  const admin = await requireFullAdmin();
   try {
     const p = rpcPayload(
       await callAdminRpc(
@@ -205,7 +231,7 @@ export async function adminBanUser(
 export async function adminUnbanUser(
   userId: string,
 ): Promise<{ ok?: true; error?: string }> {
-  const admin = await requireAdmin();
+  const admin = await requireFullAdmin();
   try {
     const p = rpcPayload(
       await callAdminRpc(
@@ -226,7 +252,7 @@ export async function adminPostDisputeChatMessage(
   matchId: string,
   body: string,
 ): Promise<{ ok?: true; error?: string }> {
-  const admin = await requireAdmin();
+  const admin = await requireDisputeStaff();
   const clean = sanitizeDisputeChatMessage(body);
   if (clean.length < 1) return { error: "Message vide." };
 

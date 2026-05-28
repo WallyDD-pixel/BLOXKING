@@ -3,19 +3,25 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const links = [
+const baseLinks = [
   { href: "/admin", label: "Vue d’ensemble", exact: true },
   { href: "/admin/matchs", label: "Matchs" },
   { href: "/admin/litiges", label: "Litiges" },
-  { href: "/admin/utilisateurs", label: "Utilisateurs" },
-];
+] as const;
 
-export function AdminNav() {
+const usersLink = {
+  href: "/admin/utilisateurs",
+  label: "Utilisateurs",
+} as const;
+
+export function AdminNav({ canManageUsers }: { canManageUsers: boolean }) {
   const pathname = usePathname();
+  const links = canManageUsers ? [...baseLinks, usersLink] : [...baseLinks];
 
   return (
     <nav className="flex flex-wrap gap-2 border-b border-white/10 pb-4">
-      {links.map(({ href, label, exact }) => {
+      {links.map(({ href, label, ...rest }) => {
+        const exact = "exact" in rest && rest.exact;
         const active = exact ? pathname === href : pathname.startsWith(href);
         return (
           <Link
@@ -31,6 +37,11 @@ export function AdminNav() {
           </Link>
         );
       })}
+      {!canManageUsers ? (
+        <span className="self-center px-2 text-xs text-zinc-600">
+          Accès modérateur litiges
+        </span>
+      ) : null}
     </nav>
   );
 }

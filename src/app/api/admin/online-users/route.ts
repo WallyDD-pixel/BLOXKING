@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { userIsAdmin } from "@/lib/auth/admin";
+import { userCanAccessAdminPanel } from "@/lib/auth/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getAdminOnlineUsers } from "@/lib/admin/queries";
 import { PRESENCE_ONLINE_MINUTES } from "@/lib/presence/constants";
 
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || !(await userIsAdmin(user))) {
+  if (!user || !(await userCanAccessAdminPanel(user))) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

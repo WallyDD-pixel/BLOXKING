@@ -365,6 +365,7 @@ export type AdminUserRow = {
   roblox_username: string | null;
   created_at: string;
   is_admin: boolean;
+  is_dispute_moderator: boolean;
   elo: number | null;
   placement_matches_played: number | null;
   matches_total: number;
@@ -382,6 +383,7 @@ export async function listAdminUsers(limit = 100): Promise<AdminUserRow[]> {
       u.roblox_username,
       u.created_at,
       coalesce(u.is_admin, false) as is_admin,
+      coalesce(u.is_dispute_moderator, false) as is_dispute_moderator,
       s.elo,
       s.placement_matches_played,
       coalesce(m.total, 0)::int as matches_total,

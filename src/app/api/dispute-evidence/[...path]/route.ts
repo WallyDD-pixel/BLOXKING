@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { userIsAdmin } from "@/lib/auth/admin";
+import { userCanAccessAdminPanel } from "@/lib/auth/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import { dbQueryOne } from "@/lib/db/query";
 import { serveDisputeEvidenceFile } from "@/lib/storage/dispute-evidence-stream";
@@ -26,7 +26,7 @@ export async function GET(
   if (!match) return new NextResponse("Introuvable", { status: 404 });
   const isParticipant =
     match.player_a === user.id || match.player_b === user.id;
-  if (!isParticipant && !(await userIsAdmin(user))) {
+  if (!isParticipant && !(await userCanAccessAdminPanel(user))) {
     return new NextResponse("Interdit", { status: 403 });
   }
 

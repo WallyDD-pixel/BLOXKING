@@ -22,6 +22,7 @@ import { AdminMatchProgressPanel } from "@/components/admin/admin-match-progress
 import { disputeEvidencePublicUrl } from "@/lib/storage/dispute-evidence-url";
 import { DisputeEvidencePreview } from "@/components/match/dispute-evidence-preview";
 import { getCurrentUser } from "@/lib/auth/session";
+import { userIsFullAdmin } from "@/lib/auth/admin";
 import { AdminDisputeChatComposer } from "@/components/admin/admin-dispute-chat-composer";
 import {
   AdminMatchModerationChat,
@@ -73,6 +74,7 @@ export default async function AdminDisputeDetailPage({
   const isClosed =
     match.status === "confirmed" || match.status === "cancelled";
   const viewer = await getCurrentUser();
+  const canManageBans = viewer ? await userIsFullAdmin(viewer) : false;
   const viewerIsParticipant =
     viewer?.id === match.player_a || viewer?.id === match.player_b;
   const progress = deriveAdminMatchProgress(match);
@@ -178,6 +180,7 @@ export default async function AdminDisputeDetailPage({
           matchId={match.id}
           playerA={modA}
           playerB={modB}
+          canManageBans={canManageBans}
         />
       ) : null}
 

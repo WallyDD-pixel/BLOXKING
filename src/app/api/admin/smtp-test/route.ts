@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { userIsAdmin } from "@/lib/auth/admin";
+import { userIsFullAdmin } from "@/lib/auth/admin";
 import { getCurrentUser } from "@/lib/auth/session";
 import {
   getSmtpDiagnostics,
@@ -9,7 +9,7 @@ import {
 
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || !(await userIsAdmin(user))) {
+  if (!user || !(await userIsFullAdmin(user))) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -31,7 +31,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
-  if (!user || !(await userIsAdmin(user))) {
+  if (!user || !(await userIsFullAdmin(user))) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

@@ -30,6 +30,7 @@ MIGRATIONS=(
   "19_matchmaking_block_same_ip.sql"
   "20_admin_dispute_decisions.sql"
   "21_site_pvp_toggle.sql"
+  "22_dispute_moderator_role.sql"
 )
 
 echo "Repo: $REPO_ROOT"

@@ -1,14 +1,14 @@
 import type { ReactNode } from "react";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { PageShell } from "@/components/page-shell";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requireAdminPanel } from "@/lib/auth/admin";
 
 export default async function AdminLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  await requireAdmin();
+  const access = await requireAdminPanel();
 
   return (
     <PageShell ads={false}>
@@ -21,7 +21,7 @@ export default async function AdminLayout({
             Panneau BloXKING
           </h1>
         </div>
-        <AdminNav />
+        <AdminNav canManageUsers={access.isFullAdmin} />
         <div className="mt-8">{children}</div>
       </div>
     </PageShell>
