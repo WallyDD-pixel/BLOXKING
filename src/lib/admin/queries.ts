@@ -372,40 +372,90 @@ export type AdminUserRow = {
   matches_wins: number;
 };
 
+const ADMIN_USER_SELECT = `
+  u.id,
+  u.email,
+  u.display_name,
+  u.roblox_username,
+  u.created_at,
+  coalesce(u.is_admin, false) as is_admin,
+  coalesce(u.is_dispute_moderator, false) as is_dispute_moderator,
+  s.elo,
+  s.placement_matches_played,
+  coalesce(m.total, 0)::int as matches_total,
+  coalesce(m.wins, 0)::int as matches_wins
+`;
+
+const ADMIN_USER_FROM = `
+  from public.users u
+  left join public.player_ranked_stats s on s.user_id = u.id
+  left join lateral (
+    select
+      count(*)::int as total,
+      count(*) filter (
+        where
+          (mt.player_a = u.id and coalesce(mt.elo_delta_a, 0) > 0)
+          or (mt.player_b = u.id and coalesce(mt.elo_delta_b, 0) > 0)
+      )::int as wins
+    from public.matches mt
+    where mt.status = 'confirmed'
+      and (mt.player_a = u.id or mt.player_b = u.id)
+  ) m on true
+`;
+
+export async function countAdminUsers(): Promise<number> {
+  const row = await dbQueryOne<{ c: string }>(
+    `select count(*)::text as c from public.users`,
+  );
+  return Number(row?.c ?? 0);
+}
+
+/** Derniers inscrits (liste par défaut). */
 export async function listAdminUsers(limit = 100): Promise<AdminUserRow[]> {
-  const lim = Math.min(Math.max(limit, 1), 300);
+  const lim = Math.min(Math.max(limit, 1), 500);
   return dbQuery<AdminUserRow>(
     `
-    select
-      u.id,
-      u.email,
-      u.display_name,
-      u.roblox_username,
-      u.created_at,
-      coalesce(u.is_admin, false) as is_admin,
-      coalesce(u.is_dispute_moderator, false) as is_dispute_moderator,
-      s.elo,
-      s.placement_matches_played,
-      coalesce(m.total, 0)::int as matches_total,
-      coalesce(m.wins, 0)::int as matches_wins
-    from public.users u
-    left join public.player_ranked_stats s on s.user_id = u.id
-    left join lateral (
-      select
-        count(*)::int as total,
-        count(*) filter (
-          where
-            (mt.player_a = u.id and coalesce(mt.elo_delta_a, 0) > 0)
-            or (mt.player_b = u.id and coalesce(mt.elo_delta_b, 0) > 0)
-        )::int as wins
-      from public.matches mt
-      where mt.status = 'confirmed'
-        and (mt.player_a = u.id or mt.player_b = u.id)
-    ) m on true
+    select ${ADMIN_USER_SELECT}
+    ${ADMIN_USER_FROM}
     order by u.created_at desc
     limit $1
     `,
     [lim],
+  );
+}
+
+/** Recherche dans toute la base (e-mail, pseudo, Roblox, id). */
+export async function searchAdminUsers(
+  query: string,
+  limit = 80,
+): Promise<AdminUserRow[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const lim = Math.min(Math.max(limit, 1), 200);
+  const pattern = `%${trimmed.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
+
+  return dbQuery<AdminUserRow>(
+    `
+    select ${ADMIN_USER_SELECT}
+    ${ADMIN_USER_FROM}
+    where (
+      u.email ilike $1
+      or coalesce(u.display_name, '') ilike $1
+      or coalesce(u.roblox_username, '') ilike $1
+      or u.id::text ilike $1
+    )
+    order by
+      case
+        when lower(u.email) = lower($2) then 0
+        when lower(coalesce(u.roblox_username, '')) = lower($2) then 1
+        when lower(coalesce(u.display_name, '')) = lower($2) then 2
+        else 3
+      end,
+      u.created_at desc
+    limit $3
+    `,
+    [pattern, trimmed, lim],
   );
 }
 

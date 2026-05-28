@@ -5,6 +5,10 @@ import {
   requireDisputeStaff,
   requireFullAdmin,
 } from "@/lib/auth/admin";
+import {
+  searchAdminUsers,
+  type AdminUserRow,
+} from "@/lib/admin/queries";
 import { dbQuery } from "@/lib/db/query";
 import { rpcJson } from "@/lib/db/rpc";
 import { sanitizeDisputeChatMessage } from "@/lib/dispute-evidence";
@@ -40,6 +44,18 @@ function revalidateAdmin(matchId?: string) {
   revalidatePath("/play");
   revalidatePath("/play/recherche");
   if (matchId) revalidatePath(`/admin/litiges/${matchId}`);
+}
+
+export async function adminSearchUsers(
+  query: string,
+): Promise<{ rows?: AdminUserRow[]; error?: string }> {
+  await requireFullAdmin();
+  try {
+    const rows = await searchAdminUsers(query);
+    return { rows };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erreur de recherche" };
+  }
 }
 
 export async function adminSetDisputeModerator(
