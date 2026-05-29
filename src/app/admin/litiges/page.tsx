@@ -46,8 +46,6 @@ function DisputeListItem({ d, closed }: { d: AdminDisputeRow; closed?: boolean }
         d.match_id,
         nameA,
         nameB,
-        d.player_a_email,
-        d.player_b_email,
         d.status,
         matchStatusLabel(d.status, !closed),
         d.ticket_count,

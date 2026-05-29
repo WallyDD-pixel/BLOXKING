@@ -1,6 +1,7 @@
 import { dbQuery, dbQueryOne } from "@/lib/db/query";
 import { sameClientConnection } from "@/lib/http/client-ip";
 import { expireStaleMatchesIfNeeded } from "@/lib/match/expire-stale-matches";
+import { userIdsWithOpenMatches } from "@/lib/match/open-matches";
 import {
   matchmakingBaseEloSpan,
   pickBestQueuePartner,
@@ -19,7 +20,11 @@ function sleepRandomJitterMs(): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function countOpenMatchesForUser(userId: string): Promise<number> {
+async function userHasOpenMatch(
+  userId: string,
+  openSet?: Set<string>,
+): Promise<boolean> {
+  if (openSet) return openSet.has(userId);
   const row = await dbQueryOne<{ c: string }>(
     `
     select count(*)::text as c
@@ -29,7 +34,7 @@ async function countOpenMatchesForUser(userId: string): Promise<number> {
     `,
     [userId],
   );
-  return Number(row?.c ?? 0);
+  return Number(row?.c ?? 0) > 0;
 }
 
 export async function joinRankedQueue(
@@ -65,7 +70,7 @@ export async function joinRankedQueue(
     return { error: mapMatchRpcError("queue_cooldown") };
   }
 
-  if ((await countOpenMatchesForUser(uid)) > 0) {
+  if (await userHasOpenMatch(uid)) {
     return {
       error:
         "Tu as déjà un match en cours. Termine-le avant de relancer une recherche.",
@@ -108,9 +113,11 @@ export async function joinRankedQueue(
     `insert into public.matchmaking_rpc_log (user_id) values ($1) returning id`,
     [uid],
   );
-  await dbQuery(
-    `delete from public.matchmaking_rpc_log where created_at < now() - interval '3 hours'`,
-  );
+  if (Math.random() < 0.04) {
+    await dbQuery(
+      `delete from public.matchmaking_rpc_log where created_at < now() - interval '3 hours'`,
+    );
+  }
 
   const stats = await dbQueryOne<{
     elo: number;
@@ -195,11 +202,14 @@ export async function joinRankedQueue(
     [uid],
   );
 
+  const candidateIds = candidates.map((r) => String(r.user_id));
+  const openMatches = await userIdsWithOpenMatches([uid, ...candidateIds]);
+
   const eligible: typeof candidates = [];
   for (const row of candidates) {
     const pid = String(row.user_id);
     if (sameClientConnection(clientIp, row.client_ip)) continue;
-    if ((await countOpenMatchesForUser(pid)) > 0) {
+    if (openMatches.has(pid)) {
       await dbQuery(`delete from public.match_queue where user_id = $1`, [pid]);
       continue;
     }
@@ -219,7 +229,7 @@ export async function joinRankedQueue(
 
   if (!partner) return { ok: true, matched: false };
 
-  if ((await countOpenMatchesForUser(partner)) > 0) {
+  if (openMatches.has(partner) || (await userHasOpenMatch(partner))) {
     await dbQuery(`delete from public.match_queue where user_id = $1`, [partner]);
     return { ok: true, matched: false };
   }

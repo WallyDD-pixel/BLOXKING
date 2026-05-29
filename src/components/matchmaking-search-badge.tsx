@@ -7,6 +7,7 @@ import {
   getQueueMatchSince,
   joinQueue,
   leaveQueue,
+  touchQueue,
 } from "@/app/play/actions";
 import {
   clearMatchmakingSearch,
@@ -28,6 +29,7 @@ export function MatchmakingSearchBadge({ userId }: Props) {
   const [foundMatchId, setFoundMatchId] = useState<string | null>(null);
   const [redirectSec, setRedirectSec] = useState(4);
   const handledFoundRef = useRef(false);
+  const pollTickRef = useRef(0);
 
   const refresh = useCallback(() => {
     setTick((n) => n + 1);
@@ -100,6 +102,20 @@ export function MatchmakingSearchBadge({ userId }: Props) {
         Date.parse(cur.since) - 15_000,
       ).toISOString();
 
+      pollTickRef.current += 1;
+      const heavyTick = pollTickRef.current % 2 === 1;
+
+      const { match } = await getQueueMatchSince(searchSinceIso);
+      if (match?.id) {
+        setFoundMatchId(match.id);
+        return;
+      }
+
+      if (!heavyTick) {
+        await touchQueue();
+        return;
+      }
+
       const res = await joinQueue();
       if (!("error" in res && res.error)) {
         if (
@@ -109,18 +125,12 @@ export function MatchmakingSearchBadge({ userId }: Props) {
           typeof res.matchId === "string"
         ) {
           setFoundMatchId(res.matchId);
-          return;
         }
-      }
-
-      const { match } = await getQueueMatchSince(searchSinceIso);
-      if (match?.id) {
-        setFoundMatchId(match.id);
       }
     };
 
     void run();
-    const id = window.setInterval(() => void run(), 2000);
+    const id = window.setInterval(() => void run(), 3000);
     return () => window.clearInterval(id);
   }, [searchingElsewhere, userId]);
 

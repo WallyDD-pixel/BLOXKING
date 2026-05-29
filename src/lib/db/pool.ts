@@ -25,9 +25,12 @@ function poolSslOption(connectionString: string) {
 }
 
 function poolMaxConnections(): number {
-  const raw = Number(process.env.DATABASE_POOL_MAX ?? "12");
-  if (!Number.isFinite(raw)) return 12;
-  return Math.min(Math.max(Math.trunc(raw), 2), 30);
+  const onVercel = Boolean(process.env.VERCEL);
+  const fallback = onVercel ? "2" : "12";
+  const raw = Number(process.env.DATABASE_POOL_MAX ?? fallback);
+  if (!Number.isFinite(raw)) return onVercel ? 2 : 12;
+  const maxCap = onVercel ? 5 : 30;
+  return Math.min(Math.max(Math.trunc(raw), 1), maxCap);
 }
 
 export function getPool(): Pool {
@@ -38,8 +41,9 @@ export function getPool(): Pool {
       connectionString,
       ssl: poolSslOption(connectionString),
       max: poolMaxConnections(),
-      idleTimeoutMillis: 30_000,
+      idleTimeoutMillis: process.env.VERCEL ? 10_000 : 30_000,
       connectionTimeoutMillis: 5_000,
+      allowExitOnIdle: Boolean(process.env.VERCEL),
     });
   }
   return globalThis.__bloxking_pg_pool;

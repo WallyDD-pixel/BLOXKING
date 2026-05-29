@@ -134,7 +134,40 @@ Pour un **premier déploiement de démo**, tu peux quand même mettre en ligne *
 
 ---
 
-## 6. Réglages Vercel utiles
+## 6. Montée en charge (plus de joueurs en même temps)
+
+### Postgres
+
+- Utilise **Neon** (ou équivalent) avec l’URL **connection pooler** (`-pooler` dans l’hôte Neon), pas la connexion directe.
+- Sur Vercel, le pool applicatif est limité à **2 connexions** par instance serverless (`DATABASE_POOL_MAX=2` par défaut si `VERCEL=1`).
+- Applique `db/23_vercel_perf_indexes.sql` sur ta base (index file matchmaking).
+
+### Variables recommandées
+
+| Variable | Valeur |
+|----------|--------|
+| `CRON_SECRET` | Chaîne aléatoire longue — active le cron Vercel |
+| `DATABASE_POOL_MAX` | `2` (sauf si une seule instance dédiée) |
+| `MATCH_EXPIRE_THROTTLE_MS` | `45000` (défaut) |
+
+Le fichier `vercel.json` déclenche **`/api/cron/expire-matches`** chaque minute (avec `Authorization: Bearer <CRON_SECRET>`). Cela évite de lancer 3 RPC d’expiration à chaque clic joueur.
+
+### Côté app (déjà dans le code)
+
+- Matchmaking : poll **léger** (vérif match + `touchQueue`) un tick sur deux, **joinQueue** l’autre → ~50 % de charge DB en file.
+- Jumelage : une requête groupée pour les matchs ouverts au lieu d’une par candidat (jusqu’à 120).
+- Classement : cache **30 s** (`unstable_cache`).
+- Expiration matchs : throttle **45 s** par instance + cron.
+
+### Limites Vercel
+
+- Serverless = beaucoup d’instances en parallèle → préférer **pooler Postgres** et éviter `DATABASE_POOL_MAX` trop élevé.
+- Stockage preuves litige : toujours **Blob/S3** pour la prod (disque éphémère).
+- Plan Pro si tu dépasses les timeouts ou le nombre d’exécutions serverless.
+
+---
+
+## 7. Réglages Vercel utiles
 
 - **Node.js** : 20.x LTS ou 22 si supporté — le fichier `package.json` peut contenir `"engines": { "node": ">=20" }`.
 - **Build Command** : `npm run build` (défaut).
@@ -144,13 +177,15 @@ Si le build dépasse le timeout gratuit, passe en équipe avec limites plus haut
 
 ---
 
-## 7. Récap checklist
+## 8. Récap checklist
 
 1. [ ] Postgres accessible depuis Internet avec `DATABASE_URL` + `DATABASE_SSL` si besoin  
-2. [ ] SQL migrations appliquées sur cette base  
-3. [ ] `NEXT_PUBLIC_SITE_URL` = URL définitive du site  
-4. [ ] `YOUTUBE_*` si tu veux les blocs YouTube  
-5. [ ] Plan pour preuves litige : accepter la limite ou migrer vers object storage  
+2. [ ] URL **pooler** Neon + `DATABASE_POOL_MAX=2`  
+3. [ ] SQL migrations appliquées (`23_vercel_perf_indexes.sql` inclus)  
+4. [ ] `CRON_SECRET` défini + cron actif après déploiement  
+5. [ ] `NEXT_PUBLIC_SITE_URL` = URL définitive du site  
+6. [ ] `YOUTUBE_*` si tu veux les blocs YouTube  
+7. [ ] Plan pour preuves litige : accepter la limite ou migrer vers object storage  
 
 Tu peux déclencher un nouveau **Deploy** : le site doit répondre sur `https://…vercel.app` (ou ton domaine).
 

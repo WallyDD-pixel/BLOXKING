@@ -8,6 +8,7 @@ import {
   getQueueMatchSince,
   joinQueue,
   leaveQueue,
+  touchQueue,
   listOngoingMatches,
   type OngoingMatchRow,
 } from "@/app/play/actions";
@@ -170,6 +171,7 @@ export function MatchmakingClient({
     initialOngoingMatches.length > 0,
   );
   const searchSince = useRef<string | null>(null);
+  const pollTickRef = useRef(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollFnRef = useRef<() => Promise<void>>(async () => {});
 
@@ -199,6 +201,22 @@ export function MatchmakingClient({
       void leaveQueue();
     };
 
+    pollTickRef.current += 1;
+    const heavyTick = pollTickRef.current % 2 === 1;
+
+    if (searchSince.current) {
+      const { match: found } = await getQueueMatchSince(searchSince.current);
+      if (found) {
+        applyFound(found as MatchRow);
+        return;
+      }
+    }
+
+    if (!heavyTick) {
+      await touchQueue();
+      return;
+    }
+
     const res = await joinQueue();
     if ("error" in res && res.error) {
       if (searchSince.current) {
@@ -217,13 +235,7 @@ export function MatchmakingClient({
       const { match: row } = await getMatchById(res.matchId);
       if (row) {
         applyFound(row as MatchRow);
-        return;
       }
-    }
-
-    if (searchSince.current) {
-      const { match: found } = await getQueueMatchSince(searchSince.current);
-      if (found) applyFound(found as MatchRow);
     }
   }, [resolveOpponent, stopPolling, userId]);
 

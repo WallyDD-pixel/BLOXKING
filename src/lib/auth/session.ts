@@ -89,10 +89,11 @@ export async function createSession(userId: string): Promise<void> {
     [token, userId],
   );
 
+  const secure = cookieSecureFlag();
   store.set(SESSION_COOKIE, token, {
     httpOnly: true,
-    sameSite: "lax",
-    secure: cookieSecureFlag(),
+    sameSite: secure ? "strict" : "lax",
+    secure,
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
   });
@@ -107,10 +108,11 @@ export async function destroySession(): Promise<void> {
     invalidateSessionCache(token);
     await dbQueryOne("delete from public.sessions where token = $1 returning token", [token]);
   }
+  const secure = cookieSecureFlag();
   store.set(SESSION_COOKIE, "", {
     httpOnly: true,
-    sameSite: "lax",
-    secure: cookieSecureFlag(),
+    sameSite: secure ? "strict" : "lax",
+    secure,
     path: "/",
     maxAge: 0,
   });

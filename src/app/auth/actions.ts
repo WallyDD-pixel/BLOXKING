@@ -6,6 +6,10 @@ import { z } from "zod";
 import type { AuthActionState } from "@/lib/auth-state";
 import { dbQueryOne } from "@/lib/db/query";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { getClientIpFromHeaders } from "@/lib/http/client-ip";
+import { passwordPolicyError } from "@/lib/security/password-policy";
+import { checkRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
+import { clientSafeError } from "@/lib/security/sanitize-error";
 import { createSession, destroySession } from "@/lib/auth/session";
 
 async function getOrigin(): Promise<string> {
@@ -19,7 +23,7 @@ async function getOrigin(): Promise<string> {
 const signupSchema = z
   .object({
     email: z.string().email("Adresse e-mail invalide"),
-    password: z.string().min(8, "Le mot de passe doit faire au moins 8 caractères"),
+    password: z.string().min(10, "Le mot de passe doit faire au moins 10 caractères"),
     confirmPassword: z.string(),
     robloxUsername: z
       .string()
@@ -41,11 +45,24 @@ const loginSchema = z.object({
   password: z.string().min(1, "Mot de passe requis"),
 });
 
-function mapAuthError(message: string): string {
-  if (/joindre la base|DATABASE_URL|ECONNREFUSED|connect/i.test(message)) {
-    return "Le serveur ne peut pas accéder à la base de données pour le moment. Réessaie plus tard ou contacte l’administrateur.";
-  }
-  return message;
+function mapAuthError(err: unknown): string {
+  return clientSafeError(
+    err,
+    "Le serveur ne peut pas accéder à la base de données pour le moment. Réessaie plus tard.",
+  );
+}
+
+async function authRateLimit(
+  scope: "login" | "register",
+  limit: number,
+  windowMs: number,
+): Promise<string | null> {
+  const h = await headers();
+  const ip = getClientIpFromHeaders(h);
+  const key = rateLimitKey(scope, ip ?? "unknown");
+  const result = checkRateLimit(key, limit, windowMs);
+  if (result.ok) return null;
+  return `Trop de tentatives. Réessaie dans ${result.retryAfterSec} secondes.`;
 }
 
 function isEmailAlreadyRegistered(message: string): boolean {
@@ -75,7 +92,12 @@ export async function signup(
     return { error: msg, success: null };
   }
 
+  const rateLimited = await authRateLimit("register", 5, 60 * 60 * 1000);
+  if (rateLimited) return { error: rateLimited, success: null };
+
   const { email, password, robloxUsername } = parsed.data;
+  const weak = passwordPolicyError(password);
+  if (weak) return { error: weak, success: null };
   const origin = await getOrigin(); // conservé (emails possibles plus tard)
   void origin;
 
@@ -100,7 +122,7 @@ export async function signup(
         hint: "use_login",
       };
     }
-    return { error: mapAuthError(msg), success: null };
+    return { error: mapAuthError(e), success: null };
   }
 
   if (!row?.id) return { error: "Impossible de créer le compte.", success: null };
@@ -123,6 +145,9 @@ export async function login(
     return { error: msg, success: null };
   }
 
+  const rateLimited = await authRateLimit("login", 10, 15 * 60 * 1000);
+  if (rateLimited) return { error: rateLimited, success: null };
+
   const email = parsed.data.email.toLowerCase();
 
   let row: {
@@ -140,11 +165,7 @@ export async function login(
       [email],
     );
   } catch (e: unknown) {
-    const msg =
-      e && typeof e === "object" && "message" in e
-        ? String((e as { message: string }).message)
-        : "Erreur base de données";
-    return { error: mapAuthError(msg), success: null };
+    return { error: mapAuthError(e), success: null };
   }
 
   if (!row) return { error: "E-mail ou mot de passe incorrect.", success: null };

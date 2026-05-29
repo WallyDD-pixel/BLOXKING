@@ -97,8 +97,6 @@ export default async function AdminMatchesPage({
                   className="hover:bg-white/[0.02]"
                   data-search={searchBlob(
                     m.id,
-                    m.player_a_email,
-                    m.player_b_email,
                     m.player_a_label,
                     m.player_b_label,
                     m.status,

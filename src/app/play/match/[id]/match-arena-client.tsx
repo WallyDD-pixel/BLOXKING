@@ -992,7 +992,7 @@ export function MatchArenaClient({
                               msg,
                               followUpEvidencePaths,
                             );
-                            if (res?.error) {
+                            if (res && "error" in res) {
                               setErr(res.error);
                               return;
                             }

@@ -100,7 +100,7 @@ export function MatchCancellationRequest({
         reason,
         evidencePaths,
       );
-      if (res.error) {
+      if (res && "error" in res) {
         setErr(res.error);
         return;
       }

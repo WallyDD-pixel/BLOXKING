@@ -168,7 +168,6 @@ export default async function ClassementPage() {
                         data-search={searchBlob(
                           rank,
                           name,
-                          row.email,
                           row.roblox_username,
                           row.display_name,
                           row.elo,
@@ -176,8 +175,6 @@ export default async function ClassementPage() {
                           kda,
                           row.wins,
                           row.losses,
-                          row.maps_won,
-                          row.maps_lost,
                           row.placement_matches_played,
                         )}
                         className={`border-b border-white/5 font-mono text-zinc-200 ${

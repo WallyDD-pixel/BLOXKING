@@ -1,7 +1,10 @@
 /** Sync présence + notifications (1 requête au lieu de 3). */
 export const SESSION_SYNC_INTERVAL_MS = 30_000;
 
-/** File matchmaking — 3 s suffit pour le jumelage sans surcharger le serveur. */
+/**
+ * File matchmaking — 1 tick léger (vérif match + touch file) puis 1 tick lourd (joinQueue).
+ * Charge DB ~2× moindre qu’un joinQueue à chaque tick.
+ */
 export const MATCHMAKING_POLL_MS = 3_000;
 
 /** Liste des rencontres en cours (hors match actif). */

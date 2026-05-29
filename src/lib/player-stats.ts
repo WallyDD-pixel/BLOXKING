@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { dbQuery } from "@/lib/db/query";
 
 /** Match confirmé avec score consensuel (même logique que le profil joueur). */
@@ -47,8 +48,7 @@ export function formatWinRate(wins: number, losses: number): string {
   return `${pct}%`;
 }
 
-export async function getLeaderboardRows(limit = 50): Promise<LeaderboardRow[]> {
-  const lim = Math.min(Math.max(limit, 1), 100);
+async function fetchLeaderboardRows(limit: number): Promise<LeaderboardRow[]> {
   return dbQuery<LeaderboardRow>(
     `
     select
@@ -97,6 +97,17 @@ export async function getLeaderboardRows(limit = 50): Promise<LeaderboardRow[]> 
     order by s.elo desc
     limit $1
     `,
-    [lim],
+    [limit],
   );
+}
+
+/** Classement public — cache 30 s pour limiter la charge DB sur Vercel. */
+export async function getLeaderboardRows(limit = 50): Promise<LeaderboardRow[]> {
+  const lim = Math.min(Math.max(limit, 1), 100);
+  const cached = unstable_cache(
+    () => fetchLeaderboardRows(lim),
+    ["leaderboard", String(lim)],
+    { revalidate: 30, tags: ["leaderboard"] },
+  );
+  return cached();
 }

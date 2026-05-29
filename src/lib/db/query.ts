@@ -1,7 +1,12 @@
 import type { QueryResultRow } from "pg";
+import { clientSafeError } from "@/lib/security/sanitize-error";
 import { getPool } from "./pool";
 
 function formatDbError(err: unknown): Error {
+  if (process.env.NODE_ENV === "production") {
+    return new Error(clientSafeError(err));
+  }
+
   const msg =
     err && typeof err === "object" && "message" in err
       ? String((err as { message: string }).message)
@@ -18,28 +23,10 @@ function formatDbError(err: unknown): Error {
     code === "ENOTFOUND"
   ) {
     return new Error(
-      "Impossible de joindre la base de données. Vérifie DATABASE_URL sur le serveur (Vercel : Postgres reachable depuis Internet, mot de passe encodé dans l’URL, DATABASE_SSL).",
+      "Impossible de joindre la base de données. Vérifie DATABASE_URL sur le serveur.",
     );
   }
 
-  if (err && typeof err === "object" && "errors" in err) {
-    const inner = (err as { errors?: unknown[] }).errors;
-    if (Array.isArray(inner) && inner.length > 0) {
-      const parts = inner
-        .map((e) =>
-          e && typeof e === "object" && "message" in e
-            ? String((e as { message: string }).message)
-            : String(e),
-        )
-        .filter(Boolean);
-      if (parts.some((p) => /ECONNREFUSED|connect/i.test(p))) {
-        return new Error(
-          "Impossible de joindre PostgreSQL (DATABASE_URL). Sur ton PC : tunnel SSH vers EC2 ou Postgres local. Vérifie aussi que le mot de passe dans l’URL encode les caractères spéciaux (& → %26).",
-        );
-      }
-      return new Error(parts.join(" · "));
-    }
-  }
   if (err instanceof Error) return err;
   return new Error(String(err));
 }

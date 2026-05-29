@@ -27,6 +27,8 @@ import { joinRankedQueue } from "@/lib/match/join-queue";
 import { expireStaleMatchesIfNeeded } from "@/lib/match/expire-stale-matches";
 import { disputeEvidencePublicUrl } from "@/lib/storage/dispute-evidence-url";
 import type { RankedStatsPublic } from "@/lib/ranked";
+import { clientSafeError } from "@/lib/security/sanitize-error";
+import { parseUuid } from "@/lib/security/uuid";
 
 async function getUserId(): Promise<string | null> {
   const user = await getCurrentUser();
@@ -40,10 +42,10 @@ function revalidateMatchPaths(matchId: string) {
 }
 
 function dbError(err: unknown): string {
-  if (err && typeof err === "object" && "message" in err) {
-    return String((err as { message: string }).message);
-  }
-  return "Erreur base de données. As-tu exécuté db/00_auth.sql et db/01_ranked.sql ?";
+  return clientSafeError(
+    err,
+    "Erreur base de données. As-tu exécuté db/00_auth.sql et db/01_ranked.sql ?",
+  );
 }
 
 async function callUserRpc(
@@ -189,6 +191,27 @@ export async function leaveQueue() {
   }
 }
 
+/** Maintient la présence en file sans relancer tout le jumelage (poll léger). */
+export async function touchQueue(): Promise<{ ok: true } | { error: string }> {
+  const uid = await getUserId();
+  if (!uid) return { error: "Non connecté" };
+
+  try {
+    await dbQueryOne(
+      `
+      update public.match_queue
+      set last_seen_at = now(), created_at = now()
+      where user_id = $1
+      returning user_id
+      `,
+      [uid],
+    );
+    return { ok: true as const };
+  } catch (e) {
+    return { error: dbError(e) };
+  }
+}
+
 export async function getQueueMatchSince(iso: string): Promise<{
   match: { id: string } | null;
 }> {
@@ -210,17 +233,20 @@ export async function getQueueMatchSince(iso: string): Promise<{
     );
     if (!data) return { match: null };
 
-    try {
-      await enrichMatchLabels(String(data.id));
-    } catch {
-      /* ignore */
+    if (!data.player_a_label && !data.player_b_label) {
+      try {
+        await enrichMatchLabels(String(data.id));
+        const refreshed = await dbQueryOne<{ id: string } & Record<string, unknown>>(
+          `select * from public.matches where id = $1`,
+          [data.id],
+        );
+        if (refreshed) return { match: refreshed };
+      } catch {
+        /* labels optionnels */
+      }
     }
 
-    const refreshed = await dbQueryOne<{ id: string } & Record<string, unknown>>(
-      `select * from public.matches where id = $1`,
-      [data.id],
-    );
-    return { match: refreshed ?? data };
+    return { match: data };
   } catch {
     return { match: null };
   }
@@ -270,12 +296,13 @@ export async function getMatchById(matchId: string) {
     return { match: null, rankedA: null, rankedB: null };
   }
 
-  await expireStaleMatchesIfNeededAction();
+  const id = parseUuid(matchId);
+  if (!id) return { match: null, rankedA: null, rankedB: null };
 
   try {
     const data = await dbQueryOne<Record<string, unknown>>(
       `select * from public.matches where id = $1`,
-      [matchId],
+      [id],
     );
     if (!data) return { match: null, rankedA: null, rankedB: null };
     if (data.player_a !== uid && data.player_b !== uid) {
@@ -297,16 +324,24 @@ function rpcPayload(data: Record<string, unknown>): { ok?: boolean; error?: stri
   return { ok: true };
 }
 
+function uuidParam(matchId: string): string | { error: string } {
+  const id = parseUuid(matchId);
+  if (!id) return { error: "Identifiant invalide." };
+  return id;
+}
+
 export async function matchConfirmStarted(matchId: string) {
   const uid = await getUserId();
   if (!uid) return { error: "Non connecté" };
+  const id = uuidParam(matchId);
+  if (typeof id !== "string") return id;
 
   try {
     const p = rpcPayload(
-      await callUserRpc(uid, `select match_confirm_started($1::uuid) as result`, [matchId]),
+      await callUserRpc(uid, `select match_confirm_started($1::uuid) as result`, [id]),
     );
     if (p.error) return { error: p.error };
-    revalidateMatchPaths(matchId);
+    revalidateMatchPaths(id);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };
@@ -320,17 +355,19 @@ export async function matchSubmitScoreClaim(
 ) {
   const uid = await getUserId();
   if (!uid) return { error: "Non connecté" };
+  const id = uuidParam(matchId);
+  if (typeof id !== "string") return id;
 
   try {
     const p = rpcPayload(
       await callUserRpc(
         uid,
         `select match_submit_score_claim($1::uuid, $2::int, $3::int) as result`,
-        [matchId, mapsWonA, mapsWonB],
+        [id, mapsWonA, mapsWonB],
       ),
     );
     if (p.error) return { error: mapMatchRpcError(p.error) };
-    revalidateMatchPaths(matchId);
+    revalidateMatchPaths(id);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };
@@ -340,15 +377,17 @@ export async function matchSubmitScoreClaim(
 export async function matchAcceptOpponentClaim(matchId: string) {
   const uid = await getUserId();
   if (!uid) return { error: "Non connecté" };
+  const id = uuidParam(matchId);
+  if (typeof id !== "string") return id;
 
   try {
     const p = rpcPayload(
       await callUserRpc(uid, `select match_accept_opponent_claim($1::uuid) as result`, [
-        matchId,
+        id,
       ]),
     );
     if (p.error) return { error: mapMatchRpcError(p.error) };
-    revalidateMatchPaths(matchId);
+    revalidateMatchPaths(id);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };
@@ -376,10 +415,12 @@ export async function listDisputeChatMessages(
 ): Promise<{ messages: DisputeChatMessageRow[] }> {
   const uid = await getUserId();
   if (!uid) return { messages: [] };
+  const id = parseUuid(matchId);
+  if (!id) return { messages: [] };
 
   const row = await dbQueryOne<{ player_a: string; player_b: string }>(
     `select player_a, player_b from public.matches where id = $1`,
-    [matchId],
+    [id],
   );
   if (!row || (row.player_a !== uid && row.player_b !== uid)) return { messages: [] };
 
@@ -391,7 +432,7 @@ export async function listDisputeChatMessages(
       where match_id = $1
       order by created_at asc
       `,
-      [matchId],
+      [id],
     );
     return { messages };
   } catch {
@@ -402,6 +443,8 @@ export async function listDisputeChatMessages(
 export async function postDisputeChatMessage(matchId: string, body: string) {
   const uid = await getUserId();
   if (!uid) return { error: "Non connecté" };
+  const id = uuidParam(matchId);
+  if (typeof id !== "string") return id;
 
   const clean = sanitizeDisputeChatMessage(body);
   if (clean.length < 1) {
@@ -413,18 +456,18 @@ export async function postDisputeChatMessage(matchId: string, body: string) {
       await callUserRpc(
         uid,
         `select match_post_dispute_chat_message($1::uuid, $2::text) as result`,
-        [matchId, clean],
+        [id, clean],
       ),
     );
     if (p.error) return { error: mapMatchRpcError(String(p.error)) };
-    revalidateMatchPaths(matchId);
+    revalidateMatchPaths(id);
     // Best-effort : ne bloque pas l’action utilisateur si le provider mail n’est pas configuré.
     void notifyDisputeChatEmail({
-      matchId,
+      matchId: id,
       authorId: uid,
       message: clean,
     }).catch(() => null);
-    void notifyOtherPlayerDisputeMessageInApp(matchId, uid).catch(() => null);
+    void notifyOtherPlayerDisputeMessageInApp(id, uid).catch(() => null);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };
@@ -436,10 +479,12 @@ export async function listDisputeTickets(
 ): Promise<{ tickets: DisputeTicketRow[] }> {
   const uid = await getUserId();
   if (!uid) return { tickets: [] };
+  const id = parseUuid(matchId);
+  if (!id) return { tickets: [] };
 
   const row = await dbQueryOne<{ player_a: string; player_b: string }>(
     `select player_a, player_b from public.matches where id = $1`,
-    [matchId],
+    [id],
   );
   if (!row || (row.player_a !== uid && row.player_b !== uid)) return { tickets: [] };
 
@@ -457,7 +502,7 @@ export async function listDisputeTickets(
       where match_id = $1
       order by created_at asc
       `,
-      [matchId],
+      [id],
     );
 
     return {
@@ -495,10 +540,12 @@ export async function listMatchCancellationRequests(
 ): Promise<{ requests: MatchCancellationRequestRow[] }> {
   const uid = await getUserId();
   if (!uid) return { requests: [] };
+  const id = parseUuid(matchId);
+  if (!id) return { requests: [] };
 
   const row = await dbQueryOne<{ player_a: string; player_b: string }>(
     `select player_a, player_b from public.matches where id = $1`,
-    [matchId],
+    [id],
   );
   if (!row || (row.player_a !== uid && row.player_b !== uid)) return { requests: [] };
 
@@ -517,7 +564,7 @@ export async function listMatchCancellationRequests(
       where match_id = $1
       order by created_at desc
       `,
-      [matchId],
+      [id],
     );
     const requests: MatchCancellationRequestRow[] = rows.map((r) => {
       const attachment_paths = r.attachment_paths ?? [];
@@ -546,13 +593,15 @@ export async function matchRequestCancellation(
 ) {
   const uid = await getUserId();
   if (!uid) return { error: "Non connecté" };
+  const id = uuidParam(matchId);
+  if (typeof id !== "string") return id;
 
   const clean = sanitizeDisputeExplanation(reason);
   if (clean.length < 10) {
     return { error: mapMatchRpcError("cancellation_reason_too_short") };
   }
 
-  if (!validateDisputeStoragePaths(matchId, uid, attachmentPaths)) {
+  if (!validateDisputeStoragePaths(id, uid, attachmentPaths)) {
     return { error: mapMatchRpcError("invalid_attachment_paths") };
   }
 
@@ -561,13 +610,13 @@ export async function matchRequestCancellation(
       await callUserRpc(
         uid,
         `select match_request_cancellation($1::uuid, $2::text, $3::text[]) as result`,
-        [matchId, clean, attachmentPaths],
+        [id, clean, attachmentPaths],
       ),
     );
     if (p.error) return { error: mapMatchRpcError(String(p.error)) };
-    revalidateMatchPaths(matchId);
+    revalidateMatchPaths(id);
     revalidatePath("/admin/matchs");
-    revalidatePath(`/admin/litiges/${matchId}`);
+    revalidatePath(`/admin/litiges/${id}`);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };
@@ -578,12 +627,14 @@ export async function matchRequestCancellation(
 export async function uploadMatchDisputeEvidence(matchId: string, file: File) {
   const uid = await getUserId();
   if (!uid) return { error: "Non connecté" as const };
+  const id = uuidParam(matchId);
+  if (typeof id !== "string") return id;
 
   const { processDisputeEvidenceUpload } = await import(
     "@/lib/dispute-evidence-upload-server"
   );
   const buf = Buffer.from(await file.arrayBuffer());
-  const result = await processDisputeEvidenceUpload(matchId, uid, buf);
+  const result = await processDisputeEvidenceUpload(id, uid, buf);
   if ("error" in result) return { error: result.error };
   return { path: result.path, kind: result.kind };
 }
@@ -595,13 +646,15 @@ export async function matchSubmitDisputeTicket(
 ) {
   const uid = await getUserId();
   if (!uid) return { error: "Non connecté" };
+  const id = uuidParam(matchId);
+  if (typeof id !== "string") return id;
 
   const clean = sanitizeDisputeExplanation(explanation);
   if (clean.length < 10) {
     return { error: mapMatchRpcError("ticket_body_too_short") };
   }
 
-  if (!validateDisputeStoragePaths(matchId, uid, attachmentPaths)) {
+  if (!validateDisputeStoragePaths(id, uid, attachmentPaths)) {
     return { error: mapMatchRpcError("invalid_attachment_paths") };
   }
 
@@ -610,17 +663,17 @@ export async function matchSubmitDisputeTicket(
       await callUserRpc(
         uid,
         `select match_submit_dispute_ticket($1::uuid, $2::text, $3::text[]) as result`,
-        [matchId, clean, attachmentPaths],
+        [id, clean, attachmentPaths],
       ),
     );
     if (p.error) return { error: mapMatchRpcError(String(p.error)) };
-    revalidateMatchPaths(matchId);
+    revalidateMatchPaths(id);
     void notifyDisputeTicketEmail({
-      matchId,
+      matchId: id,
       authorId: uid,
       explanation: clean,
     }).catch(() => null);
-    void notifyDisputeOpenedInApp(matchId, uid).catch(() => null);
+    void notifyDisputeOpenedInApp(id, uid).catch(() => null);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };
@@ -630,13 +683,15 @@ export async function matchSubmitDisputeTicket(
 export async function matchDeclareDispute(matchId: string) {
   const uid = await getUserId();
   if (!uid) return { error: "Non connecté" };
+  const id = uuidParam(matchId);
+  if (typeof id !== "string") return id;
 
   try {
     const p = rpcPayload(
-      await callUserRpc(uid, `select match_declare_dispute($1::uuid) as result`, [matchId]),
+      await callUserRpc(uid, `select match_declare_dispute($1::uuid) as result`, [id]),
     );
     if (p.error) return { error: mapMatchRpcError(String(p.error)) };
-    revalidateMatchPaths(matchId);
+    revalidateMatchPaths(id);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };
@@ -646,15 +701,17 @@ export async function matchDeclareDispute(matchId: string) {
 export async function matchResetAfterDispute(matchId: string) {
   const uid = await getUserId();
   if (!uid) return { error: "Non connecté" };
+  const id = uuidParam(matchId);
+  if (typeof id !== "string") return id;
 
   try {
     const p = rpcPayload(
       await callUserRpc(uid, `select match_reset_after_dispute($1::uuid) as result`, [
-        matchId,
+        id,
       ]),
     );
     if (p.error) return { error: mapMatchRpcError(p.error) };
-    revalidateMatchPaths(matchId);
+    revalidateMatchPaths(id);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };
@@ -664,15 +721,17 @@ export async function matchResetAfterDispute(matchId: string) {
 export async function matchFinalize(matchId: string) {
   const uid = await getUserId();
   if (!uid) return { error: "Non connecté" };
+  const id = uuidParam(matchId);
+  if (typeof id !== "string") return id;
 
   try {
     const p = rpcPayload(
-      await callUserRpc(uid, `select match_finalize($1::uuid) as result`, [matchId]),
+      await callUserRpc(uid, `select match_finalize($1::uuid) as result`, [id]),
     );
     if (p.error) return { error: mapMatchRpcError(p.error) };
-    revalidateMatchPaths(matchId);
-    void notifyMatchResultEmails(matchId);
-    void notifyMatchResultInApp(matchId).catch(() => null);
+    revalidateMatchPaths(id);
+    void notifyMatchResultEmails(id);
+    void notifyMatchResultInApp(id).catch(() => null);
     return { ok: true as const };
   } catch (e) {
     return { error: dbError(e) };

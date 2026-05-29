@@ -31,6 +31,7 @@ MIGRATIONS=(
   "20_admin_dispute_decisions.sql"
   "21_site_pvp_toggle.sql"
   "22_dispute_moderator_role.sql"
+  "23_vercel_perf_indexes.sql"
 )
 
 echo "Repo: $REPO_ROOT"
